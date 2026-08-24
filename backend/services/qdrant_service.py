@@ -1,86 +1,240 @@
+import os
 import uuid
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
+from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
-    VectorParams,
-    PointStruct,
-    Filter,
     FieldCondition,
+    Filter,
     MatchValue,
+    PointStruct,
+    VectorParams,
 )
 
-from fastembed import TextEmbedding
+
+load_dotenv()
+
+
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+
+QDRANT_COLLECTION = os.getenv(
+    "QDRANT_COLLECTION",
+    "enterprise_documents",
+)
+
+EMBEDDING_MODEL_NAME = os.getenv(
+    "EMBEDDING_MODEL_NAME",
+    "sentence-transformers/all-MiniLM-L6-v2",
+)
 
 
 
-
-QDRANT_URL = "http://localhost:6333"
-
-COLLECTION_NAME = "enterprise_documents"
-
-# all-MiniLM-L6-v2 produces 384-dimensional embeddings
 VECTOR_SIZE = 384
+
+
+if not QDRANT_URL:
+    raise RuntimeError(
+        "QDRANT_URL environment variable is missing."
+    )
 
 
 
 
 client = QdrantClient(
-    url=QDRANT_URL
+    url=QDRANT_URL,
+    api_key=QDRANT_API_KEY or None,
+    timeout=60,
 )
 
 
 
 
-embedding_model = TextEmbedding(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+_embedding_model = None
+
+
+def get_embedding_model():
+    """
+    Load the embedding model only when it is actually needed.
+
+    IMPORTANT:
+    We intentionally import SentenceTransformer inside this
+    function so Render can start FastAPI quickly without loading
+    PyTorch / HuggingFace models during application startup.
+    """
+
+    global _embedding_model
+
+    if _embedding_model is None:
+        print("Loading embedding model...")
+
+        from sentence_transformers import SentenceTransformer
+
+        _embedding_model = SentenceTransformer(
+            EMBEDDING_MODEL_NAME
+        )
+
+        print(
+            "Embedding model loaded successfully:",
+            EMBEDDING_MODEL_NAME,
+        )
+
+    return _embedding_model
 
 
 
 
-def create_collection():
+def ensure_collection() -> None:
+    """
+    Create the Qdrant collection if it does not already exist.
+
+    This function is called lazily when indexing/searching rather
+    than during FastAPI startup.
+    """
 
     try:
-
-        collections = client.get_collections()
-
-        existing_collections = [
-            collection.name
-            for collection in collections.collections
-        ]
-
-        if COLLECTION_NAME in existing_collections:
-
-            print(
-                f"Qdrant collection already exists: "
-                f"{COLLECTION_NAME}"
-            )
-
+        if client.collection_exists(
+            collection_name=QDRANT_COLLECTION
+        ):
             return
 
+        print(
+            f"Creating Qdrant collection: "
+            f"{QDRANT_COLLECTION}"
+        )
 
         client.create_collection(
-
-            collection_name=COLLECTION_NAME,
-
+            collection_name=QDRANT_COLLECTION,
             vectors_config=VectorParams(
                 size=VECTOR_SIZE,
-                distance=Distance.COSINE
-            )
+                distance=Distance.COSINE,
+            ),
         )
 
         print(
-            f"Created Qdrant collection: "
-            f"{COLLECTION_NAME}"
+            f"Qdrant collection created: "
+            f"{QDRANT_COLLECTION}"
         )
 
-    except Exception as e:
-
+    except Exception as error:
         print(
-            "Qdrant collection creation error:",
-            e
+            "QDRANT COLLECTION ERROR:",
+            repr(error),
+        )
+        raise
+
+
+def create_collection() -> None:
+    """
+    Backward-compatible wrapper.
+    """
+    ensure_collection()
+
+def create_embedding(
+    text: str,
+) -> List[float]:
+    """
+    Convert text into a 384-dimensional embedding.
+    """
+
+    if not text:
+        raise ValueError(
+            "Cannot create embedding for empty text."
+        )
+
+    clean_text = text.strip()
+
+    if not clean_text:
+        raise ValueError(
+            "Cannot create embedding for empty text."
+        )
+
+    model = get_embedding_model()
+
+    embedding = model.encode(
+        clean_text,
+        normalize_embeddings=True,
+    )
+
+    return embedding.tolist()
+
+
+# ============================================================
+# STORE ONE CHUNK
+# ============================================================
+
+def store_chunk(
+    text: str,
+    agent_id: str,
+    document_id: str,
+    filename: str,
+    chunk_index: int,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> str:
+    """
+    Store one document chunk and its embedding in Qdrant.
+    """
+
+    if not agent_id:
+        raise ValueError(
+            "agent_id is required."
+        )
+
+    if not document_id:
+        raise ValueError(
+            "document_id is required."
+        )
+
+    if not text or not text.strip():
+        raise ValueError(
+            "Chunk text cannot be empty."
+        )
+
+    ensure_collection()
+
+    embedding = create_embedding(
+        text
+    )
+
+    point_id = str(
+        uuid.uuid4()
+    )
+
+    payload: Dict[str, Any] = {
+        "agent_id": agent_id,
+        "document_id": document_id,
+        "filename": filename,
+        "chunk_index": chunk_index,
+        "content": text,
+        "text": text,
+    }
+
+    if metadata:
+        payload.update(
+            metadata
+        )
+
+    point = PointStruct(
+        id=point_id,
+        vector=embedding,
+        payload=payload,
+    )
+
+    try:
+        client.upsert(
+            collection_name=QDRANT_COLLECTION,
+            points=[point],
+            wait=True,
+        )
+
+        return point_id
+
+    except Exception as error:
+        print(
+            "QDRANT STORE ERROR:",
+            repr(error),
         )
 
         raise
@@ -88,93 +242,52 @@ def create_collection():
 
 
 
-def create_embedding(text: str):
-
-    if not text or not text.strip():
-
-        raise ValueError(
-            "Cannot create embedding for empty text"
-        )
-
-    embeddings = list(
-        embedding_model.embed([text])
-    )
-
-    return embeddings[0].tolist()
-
-
-
-
-def store_chunk(
-    text: str,
+def store_chunks(
+    chunks: List[str],
     agent_id: str,
     document_id: str,
     filename: str,
-    chunk_index: int
-):
+) -> int:
+    """
+    Store all chunks belonging to one document.
+    """
 
-    if not text or not text.strip():
+    if not chunks:
+        return 0
 
-        raise ValueError(
-            "Cannot store an empty chunk"
+    indexed_count = 0
+
+    total = len(
+        chunks
+    )
+
+    for index, chunk in enumerate(
+        chunks
+    ):
+        if not chunk:
+            continue
+
+        clean_chunk = chunk.strip()
+
+        if not clean_chunk:
+            continue
+
+        store_chunk(
+            text=clean_chunk,
+            agent_id=agent_id,
+            document_id=document_id,
+            filename=filename,
+            chunk_index=index,
         )
 
+        indexed_count += 1
 
+        print(
+            f"Indexed chunk "
+            f"{indexed_count}/{total}"
+        )
 
-
-    vector = create_embedding(text)
-
-
-
-
-    point_id = str(
-        uuid.uuid4()
-    )
-
-
-
-
-    payload = {
-
-        "text": text,
-
-        "agent_id": agent_id,
-
-        "document_id": document_id,
-
-        "filename": filename,
-
-        "chunk_index": chunk_index
-    }
-
-
-
-
-    client.upsert(
-
-        collection_name=COLLECTION_NAME,
-
-        points=[
-
-            PointStruct(
-
-                id=point_id,
-
-                vector=vector,
-
-                payload=payload
-            )
-        ]
-    )
-
-
-    print(
-        f"Indexed chunk "
-        f"{chunk_index + 1}"
-    )
-
-
-    return point_id
+    return indexed_count
 
 
 
@@ -183,99 +296,243 @@ def search_chunks(
     query: str,
     agent_id: str,
     document_id: Optional[str] = None,
-    limit: int = 5
-):
-    if not query or not query.strip():
+    limit: int = 5,
+) -> List[Dict[str, Any]]:
+    """
+    Semantic search over indexed chunks.
+
+    Search is always restricted to agent_id.
+
+    If document_id is provided, search is additionally restricted
+    to that specific document.
+    """
+
+    if not query:
         return []
 
-    query_vector = create_embedding(query)
+    if not query.strip():
+        return []
 
-    conditions = [
+    if not agent_id:
+        raise ValueError(
+            "agent_id is required."
+        )
+
+    ensure_collection()
+
+    query_vector = create_embedding(
+        query
+    )
+
+    must_conditions = [
         FieldCondition(
             key="agent_id",
             match=MatchValue(
                 value=agent_id
-            )
+            ),
         )
     ]
 
     if document_id:
-        conditions.append(
+        must_conditions.append(
             FieldCondition(
                 key="document_id",
                 match=MatchValue(
                     value=document_id
-                )
+                ),
             )
         )
 
-    query_filter = Filter(
-        must=conditions
+    search_filter = Filter(
+        must=must_conditions
     )
 
     try:
+        # Newer qdrant-client API
         response = client.query_points(
-            collection_name=COLLECTION_NAME,
+            collection_name=QDRANT_COLLECTION,
             query=query_vector,
-            query_filter=query_filter,
+            query_filter=search_filter,
             limit=limit,
             with_payload=True,
         )
 
         points = response.points
 
-        formatted_results = []
+    except AttributeError:
+        # Compatibility with older qdrant-client releases
+        points = client.search(
+            collection_name=QDRANT_COLLECTION,
+            query_vector=query_vector,
+            query_filter=search_filter,
+            limit=limit,
+            with_payload=True,
+        )
 
-        for result in points:
-            payload = result.payload or {}
-
-            formatted_results.append({
-                "score": result.score,
-                "text": payload.get(
-                    "text",
-                    ""
-                ),
-                "agent_id": payload.get(
-                    "agent_id"
-                ),
-                "document_id": payload.get(
-                    "document_id"
-                ),
-                "filename": payload.get(
-                    "filename"
-                ),
-                "chunk_index": payload.get(
-                    "chunk_index"
-                )
-            })
-
-        return formatted_results
-
-    except Exception as e:
+    except Exception as error:
         print(
             "QDRANT SEARCH ERROR:",
-            repr(e)
+            repr(error),
         )
+
+        raise
+
+    results: List[
+        Dict[str, Any]
+    ] = []
+
+    for point in points:
+        payload = (
+            point.payload or {}
+        )
+
+        content = (
+            payload.get("content")
+            or payload.get("text")
+            or ""
+        )
+
+        result = {
+            "content": content,
+            "text": content,
+
+            "agent_id":
+                payload.get(
+                    "agent_id"
+                ),
+
+            "document_id":
+                payload.get(
+                    "document_id"
+                ),
+
+            "filename":
+                payload.get(
+                    "filename"
+                ),
+
+            "chunk_index":
+                payload.get(
+                    "chunk_index"
+                ),
+
+            "score":
+                float(
+                    point.score
+                ),
+        }
+
+        results.append(
+            result
+        )
+
+    print(
+        f"Retrieved "
+        f"{len(results)} chunks"
+    )
+
+    for result in results:
+        print(
+            "SOURCE:",
+            result.get(
+                "filename"
+            ),
+            "score:",
+            result.get(
+                "score"
+            ),
+        )
+
+    return results
+
+
+
+def delete_document_chunks(
+    agent_id: str,
+    document_id: str,
+) -> None:
+    """
+    Delete all vector chunks associated with one document.
+    """
+
+    if not agent_id:
+        raise ValueError(
+            "agent_id is required."
+        )
+
+    if not document_id:
+        raise ValueError(
+            "document_id is required."
+        )
+
+    ensure_collection()
+
+    delete_filter = Filter(
+        must=[
+            FieldCondition(
+                key="agent_id",
+                match=MatchValue(
+                    value=agent_id
+                ),
+            ),
+            FieldCondition(
+                key="document_id",
+                match=MatchValue(
+                    value=document_id
+                ),
+            ),
+        ]
+    )
+
+    try:
+        from qdrant_client.models import (
+            FilterSelector,
+        )
+
+        client.delete(
+            collection_name=QDRANT_COLLECTION,
+            points_selector=FilterSelector(
+                filter=delete_filter
+            ),
+            wait=True,
+        )
+
+        print(
+            "Deleted Qdrant chunks for document:",
+            document_id,
+        )
+
+    except Exception as error:
+        print(
+            "QDRANT DELETE ERROR:",
+            repr(error),
+        )
+
         raise
 
 
 
-if __name__ == "__main__":
 
-    print(
-        "Testing Qdrant connection..."
-    )
+def check_qdrant_connection() -> bool:
+    """
+    Optional Qdrant connection test.
 
-    collections = client.get_collections()
+    Do NOT automatically call this when importing main.py.
+    """
 
-    print(
-        "Qdrant connected successfully!"
-    )
+    try:
+        client.get_collections()
 
-    print(
-        "Collections:",
-        [
-            collection.name
-            for collection in collections.collections
-        ]
-    )
+        print(
+            "Qdrant connection successful."
+        )
+
+        return True
+
+    except Exception as error:
+        print(
+            "Qdrant connection failed:",
+            repr(error),
+        )
+
+        return False
