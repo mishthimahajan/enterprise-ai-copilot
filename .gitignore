@@ -1,0 +1,57 @@
+# =========================
+# Environment / Secrets
+# =========================
+.env
+.env.*
+!.env.example
+
+backend/.env
+frontend/.env.local
+
+# =========================
+# Python / FastAPI
+# =========================
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# =========================
+# Next.js / Node
+# =========================
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# =========================
+# Python build/cache
+# =========================
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# =========================
+# IDE
+# =========================
+.vscode/
+.idea/
+
+# =========================
+# OS
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Logs
+# =========================
+*.log
+npm-debug.log*
+
+# =========================
+# Uploaded runtime files
+# =========================
+backend/uploads/
