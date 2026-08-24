@@ -1,46 +1,28 @@
 # Python
-__pycache__/
-*.py[cod]
-*.pyo
-
-# Virtual environment
 .venv/
 venv/
-env/
+__pycache__/
+*.pyc
 
 # Environment variables
 .env
 .env.*
 !.env.example
 
-# FastAPI uploads
-backend/uploads/
-uploads/
-
-# Python cache
-.pytest_cache/
-.mypy_cache/
-
-# Node
+# Next.js
 frontend/node_modules/
 frontend/.next/
-frontend/out/
+frontend/.env.local
 
-# Logs
-*.log
-
-# OS
-.DS_Store
-Thumbs.db
+# Backend
+backend/.env
+backend/__pycache__/
+backend/uploads/
 
 # IDE
 .vscode/
 .idea/
 
-# Secrets
-*.pem
-*.key
-
-# Build files
-dist/
-build/
+# OS
+.DS_Store
+Thumbs.db

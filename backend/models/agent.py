@@ -1,20 +1,31 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 
 
 class AgentCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = None
+    name: str
+    description: Optional[str] = ""
 
 
 class AgentResponse(BaseModel):
     agent_id: str
     name: str
-    description: Optional[str] = None
-    owner_agent_id: str
+    description: Optional[str] = ""
+    owner_id: str
+    members: List[str] = Field(
+        default_factory=list
+    )
 
 
 class AgentListItem(BaseModel):
     agent_id: str
     name: str
-    description: Optional[str] = None
+    description: Optional[str] = ""
+    owner_id: str
+    members: List[str] = Field(
+        default_factory=list
+    )
+
+
+class AddMemberRequest(BaseModel):
+    user_id: str

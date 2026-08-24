@@ -15,3 +15,4 @@ users_collection = db["users"]
 
 documents_collection = db["documents"]
 agents_collection = db["agents"]
+chat_collection = db["chat_messages"]

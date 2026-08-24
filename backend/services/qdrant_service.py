@@ -1,5 +1,3 @@
-
-
 import uuid
 from typing import Optional
 
@@ -187,110 +185,78 @@ def search_chunks(
     document_id: Optional[str] = None,
     limit: int = 5
 ):
-
     if not query or not query.strip():
-
         return []
 
-
-
-
-    query_vector = create_embedding(
-        query
-    )
-
-
-
+    query_vector = create_embedding(query)
 
     conditions = [
-
         FieldCondition(
-
             key="agent_id",
-
             match=MatchValue(
                 value=agent_id
             )
         )
     ]
 
-
-
-
     if document_id:
-
         conditions.append(
-
             FieldCondition(
-
                 key="document_id",
-
                 match=MatchValue(
                     value=document_id
                 )
             )
         )
 
-
     query_filter = Filter(
         must=conditions
     )
 
+    try:
+        response = client.query_points(
+            collection_name=COLLECTION_NAME,
+            query=query_vector,
+            query_filter=query_filter,
+            limit=limit,
+            with_payload=True,
+        )
 
+        points = response.points
 
-    results = client.search(
+        formatted_results = []
 
-        collection_name=COLLECTION_NAME,
+        for result in points:
+            payload = result.payload or {}
 
-        query_vector=query_vector,
+            formatted_results.append({
+                "score": result.score,
+                "text": payload.get(
+                    "text",
+                    ""
+                ),
+                "agent_id": payload.get(
+                    "agent_id"
+                ),
+                "document_id": payload.get(
+                    "document_id"
+                ),
+                "filename": payload.get(
+                    "filename"
+                ),
+                "chunk_index": payload.get(
+                    "chunk_index"
+                )
+            })
 
-        query_filter=query_filter,
+        return formatted_results
 
-        limit=limit,
-
-        with_payload=True
-    )
-
-
-
-
-    formatted_results = []
-
-
-    for result in results:
-
-        payload = result.payload or {}
-
-
-        formatted_results.append({
-
-            "score": result.score,
-
-            "text": payload.get(
-                "text",
-                ""
-            ),
-
-            "agent_id": payload.get(
-                "agent_id"
-            ),
-
-            "document_id": payload.get(
-                "document_id"
-            ),
-
-            "filename": payload.get(
-                "filename"
-            ),
-
-            "chunk_index": payload.get(
-                "chunk_index"
-            )
-        })
-
-
-    return formatted_results
-
+    except Exception as e:
+        print(
+            "QDRANT SEARCH ERROR:",
+            repr(e)
+        )
+        raise
 
 
 
