@@ -42,3 +42,9 @@ def root():
     return {
         "message": "Enterprise AI Copilot API is running"
     }                  
+
+@app.get("/health")
+def health():
+    return {
+        "status": "healthy"
+    }
