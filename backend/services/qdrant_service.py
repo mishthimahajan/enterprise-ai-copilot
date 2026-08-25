@@ -3,19 +3,11 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-from qdrant_client import QdrantClient
-from qdrant_client.models import (
-    Distance,
-    FieldCondition,
-    Filter,
-    MatchValue,
-    PointStruct,
-    VectorParams,
-)
+
+
 
 
 load_dotenv()
-
 
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
@@ -30,8 +22,6 @@ EMBEDDING_MODEL_NAME = os.getenv(
     "sentence-transformers/all-MiniLM-L6-v2",
 )
 
-
-
 VECTOR_SIZE = 384
 
 
@@ -43,26 +33,49 @@ if not QDRANT_URL:
 
 
 
-client = QdrantClient(
-    url=QDRANT_URL,
-    api_key=QDRANT_API_KEY or None,
-    timeout=60,
-)
-
-
-
-
+_qdrant_client = None
 _embedding_model = None
+
+
+
+
+def get_qdrant_client():
+    """
+    Create Qdrant client only when a RAG operation
+    actually needs it.
+
+    This prevents Qdrant/FastEmbed/ONNX initialization
+    during FastAPI startup on Render.
+    """
+
+    global _qdrant_client
+
+    if _qdrant_client is None:
+        print("Initializing Qdrant client...")
+
+        
+        from qdrant_client import QdrantClient
+
+        _qdrant_client = QdrantClient(
+            url=QDRANT_URL,
+            api_key=QDRANT_API_KEY or None,
+            timeout=60,
+        )
+
+        print("Qdrant client initialized.")
+
+    return _qdrant_client
+
+
 
 
 def get_embedding_model():
     """
-    Load the embedding model only when it is actually needed.
+    Load SentenceTransformer only when an embedding
+    is actually required.
 
-    IMPORTANT:
-    We intentionally import SentenceTransformer inside this
-    function so Render can start FastAPI quickly without loading
-    PyTorch / HuggingFace models during application startup.
+    FastAPI can therefore start without loading Torch,
+    HuggingFace, ONNX, etc.
     """
 
     global _embedding_model
@@ -70,6 +83,7 @@ def get_embedding_model():
     if _embedding_model is None:
         print("Loading embedding model...")
 
+        
         from sentence_transformers import SentenceTransformer
 
         _embedding_model = SentenceTransformer(
@@ -77,7 +91,7 @@ def get_embedding_model():
         )
 
         print(
-            "Embedding model loaded successfully:",
+            "Embedding model loaded:",
             EMBEDDING_MODEL_NAME,
         )
 
@@ -88,21 +102,28 @@ def get_embedding_model():
 
 def ensure_collection() -> None:
     """
-    Create the Qdrant collection if it does not already exist.
-
-    This function is called lazily when indexing/searching rather
-    than during FastAPI startup.
+    Create Qdrant collection if it does not exist.
     """
 
+    client = get_qdrant_client()
+
+    # Lazy imports
+    from qdrant_client.models import (
+        Distance,
+        VectorParams,
+    )
+
     try:
-        if client.collection_exists(
+        exists = client.collection_exists(
             collection_name=QDRANT_COLLECTION
-        ):
+        )
+
+        if exists:
             return
 
         print(
-            f"Creating Qdrant collection: "
-            f"{QDRANT_COLLECTION}"
+            "Creating Qdrant collection:",
+            QDRANT_COLLECTION,
         )
 
         client.create_collection(
@@ -114,8 +135,8 @@ def ensure_collection() -> None:
         )
 
         print(
-            f"Qdrant collection created: "
-            f"{QDRANT_COLLECTION}"
+            "Qdrant collection created:",
+            QDRANT_COLLECTION,
         )
 
     except Exception as error:
@@ -123,21 +144,30 @@ def ensure_collection() -> None:
             "QDRANT COLLECTION ERROR:",
             repr(error),
         )
+
         raise
 
 
+# ============================================================
+# BACKWARD COMPATIBILITY
+# ============================================================
+
 def create_collection() -> None:
     """
-    Backward-compatible wrapper.
+    Existing documents.py may still call
+    create_collection().
     """
+
     ensure_collection()
+
+
+# ============================================================
+# EMBEDDING
+# ============================================================
 
 def create_embedding(
     text: str,
 ) -> List[float]:
-    """
-    Convert text into a 384-dimensional embedding.
-    """
 
     if not text:
         raise ValueError(
@@ -162,7 +192,7 @@ def create_embedding(
 
 
 # ============================================================
-# STORE ONE CHUNK
+# STORE SINGLE CHUNK
 # ============================================================
 
 def store_chunk(
@@ -171,11 +201,10 @@ def store_chunk(
     document_id: str,
     filename: str,
     chunk_index: int,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: Optional[
+        Dict[str, Any]
+    ] = None,
 ) -> str:
-    """
-    Store one document chunk and its embedding in Qdrant.
-    """
 
     if not agent_id:
         raise ValueError(
@@ -194,6 +223,13 @@ def store_chunk(
 
     ensure_collection()
 
+    client = get_qdrant_client()
+
+    # Lazy import
+    from qdrant_client.models import (
+        PointStruct,
+    )
+
     embedding = create_embedding(
         text
     )
@@ -207,6 +243,8 @@ def store_chunk(
         "document_id": document_id,
         "filename": filename,
         "chunk_index": chunk_index,
+
+        # Keep both for compatibility
         "content": text,
         "text": text,
     }
@@ -240,7 +278,9 @@ def store_chunk(
         raise
 
 
-
+# ============================================================
+# STORE MULTIPLE CHUNKS
+# ============================================================
 
 def store_chunks(
     chunks: List[str],
@@ -248,18 +288,13 @@ def store_chunks(
     document_id: str,
     filename: str,
 ) -> int:
-    """
-    Store all chunks belonging to one document.
-    """
 
     if not chunks:
         return 0
 
     indexed_count = 0
 
-    total = len(
-        chunks
-    )
+    total = len(chunks)
 
     for index, chunk in enumerate(
         chunks
@@ -290,7 +325,9 @@ def store_chunks(
     return indexed_count
 
 
-
+# ============================================================
+# SEARCH
+# ============================================================
 
 def search_chunks(
     query: str,
@@ -298,19 +335,13 @@ def search_chunks(
     document_id: Optional[str] = None,
     limit: int = 5,
 ) -> List[Dict[str, Any]]:
-    """
-    Semantic search over indexed chunks.
-
-    Search is always restricted to agent_id.
-
-    If document_id is provided, search is additionally restricted
-    to that specific document.
-    """
 
     if not query:
         return []
 
-    if not query.strip():
+    clean_query = query.strip()
+
+    if not clean_query:
         return []
 
     if not agent_id:
@@ -320,11 +351,20 @@ def search_chunks(
 
     ensure_collection()
 
-    query_vector = create_embedding(
-        query
+    client = get_qdrant_client()
+
+    # Lazy imports
+    from qdrant_client.models import (
+        FieldCondition,
+        Filter,
+        MatchValue,
     )
 
-    must_conditions = [
+    query_vector = create_embedding(
+        clean_query
+    )
+
+    conditions = [
         FieldCondition(
             key="agent_id",
             match=MatchValue(
@@ -334,7 +374,7 @@ def search_chunks(
     ]
 
     if document_id:
-        must_conditions.append(
+        conditions.append(
             FieldCondition(
                 key="document_id",
                 match=MatchValue(
@@ -344,11 +384,10 @@ def search_chunks(
         )
 
     search_filter = Filter(
-        must=must_conditions
+        must=conditions
     )
 
     try:
-        # Newer qdrant-client API
         response = client.query_points(
             collection_name=QDRANT_COLLECTION,
             query=query_vector,
@@ -360,7 +399,8 @@ def search_chunks(
         points = response.points
 
     except AttributeError:
-        # Compatibility with older qdrant-client releases
+        # For older qdrant-client versions
+
         points = client.search(
             collection_name=QDRANT_COLLECTION,
             query_vector=query_vector,
@@ -446,14 +486,14 @@ def search_chunks(
     return results
 
 
+# ============================================================
+# DELETE DOCUMENT VECTORS
+# ============================================================
 
 def delete_document_chunks(
     agent_id: str,
     document_id: str,
 ) -> None:
-    """
-    Delete all vector chunks associated with one document.
-    """
 
     if not agent_id:
         raise ValueError(
@@ -467,6 +507,16 @@ def delete_document_chunks(
 
     ensure_collection()
 
+    client = get_qdrant_client()
+
+    # Lazy imports
+    from qdrant_client.models import (
+        FieldCondition,
+        Filter,
+        FilterSelector,
+        MatchValue,
+    )
+
     delete_filter = Filter(
         must=[
             FieldCondition(
@@ -475,6 +525,7 @@ def delete_document_chunks(
                     value=agent_id
                 ),
             ),
+
             FieldCondition(
                 key="document_id",
                 match=MatchValue(
@@ -485,20 +536,18 @@ def delete_document_chunks(
     )
 
     try:
-        from qdrant_client.models import (
-            FilterSelector,
-        )
-
         client.delete(
             collection_name=QDRANT_COLLECTION,
+
             points_selector=FilterSelector(
                 filter=delete_filter
             ),
+
             wait=True,
         )
 
         print(
-            "Deleted Qdrant chunks for document:",
+            "Deleted chunks for document:",
             document_id,
         )
 
@@ -511,16 +560,21 @@ def delete_document_chunks(
         raise
 
 
-
+# ============================================================
+# CONNECTION TEST
+# ============================================================
 
 def check_qdrant_connection() -> bool:
     """
-    Optional Qdrant connection test.
+    Optional connection test.
 
-    Do NOT automatically call this when importing main.py.
+    DO NOT automatically execute this during
+    main.py import.
     """
 
     try:
+        client = get_qdrant_client()
+
         client.get_collections()
 
         print(
