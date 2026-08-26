@@ -102,35 +102,76 @@ def get_gemini_client():
 # ============================================================
 # QDRANT COLLECTION
 # ============================================================
-
 def ensure_collection() -> None:
     client = get_qdrant_client()
+
+    from qdrant_client.models import (
+        Distance,
+        PayloadSchemaType,
+        VectorParams,
+    )
 
     try:
         exists = client.collection_exists(
             collection_name=QDRANT_COLLECTION
         )
 
-        if exists:
-            return
+        if not exists:
+            print(
+                "Creating Qdrant collection:",
+                QDRANT_COLLECTION,
+            )
 
-        print(
-            "Creating Qdrant collection:",
-            QDRANT_COLLECTION,
-        )
+            client.create_collection(
+                collection_name=QDRANT_COLLECTION,
+                vectors_config=VectorParams(
+                    size=VECTOR_SIZE,
+                    distance=Distance.COSINE,
+                ),
+            )
 
-        client.create_collection(
-            collection_name=QDRANT_COLLECTION,
-            vectors_config=VectorParams(
-                size=VECTOR_SIZE,
-                distance=Distance.COSINE,
-            ),
-        )
+            print(
+                "Qdrant collection created:",
+                QDRANT_COLLECTION,
+            )
 
-        print(
-            "Qdrant collection created:",
-            QDRANT_COLLECTION,
-        )
+        # Create payload indexes required for filtered search
+        try:
+            client.create_payload_index(
+                collection_name=QDRANT_COLLECTION,
+                field_name="agent_id",
+                field_schema=PayloadSchemaType.KEYWORD,
+                wait=True,
+            )
+
+            print(
+                "Payload index ready: agent_id"
+            )
+
+        except Exception as error:
+            # Qdrant may report that the index already exists.
+            print(
+                "agent_id index:",
+                repr(error),
+            )
+
+        try:
+            client.create_payload_index(
+                collection_name=QDRANT_COLLECTION,
+                field_name="document_id",
+                field_schema=PayloadSchemaType.KEYWORD,
+                wait=True,
+            )
+
+            print(
+                "Payload index ready: document_id"
+            )
+
+        except Exception as error:
+            print(
+                "document_id index:",
+                repr(error),
+            )
 
     except Exception as error:
         print(
@@ -138,7 +179,6 @@ def ensure_collection() -> None:
             repr(error),
         )
         raise
-
 
 # Keep compatibility with your existing documents.py
 def create_collection() -> None:
