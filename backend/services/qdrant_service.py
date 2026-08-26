@@ -1,240 +1,457 @@
+import os
 import uuid
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
+from dotenv import load_dotenv
+from google import genai
+from google.genai import types
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
     Distance,
-    VectorParams,
-    PointStruct,
-    Filter,
     FieldCondition,
+    Filter,
+    FilterSelector,
     MatchValue,
-)
-
-from fastembed import TextEmbedding
-
-
-
-
-QDRANT_URL = "http://localhost:6333"
-
-COLLECTION_NAME = "enterprise_documents"
-
-# all-MiniLM-L6-v2 produces 384-dimensional embeddings
-VECTOR_SIZE = 384
-
-
-
-
-client = QdrantClient(
-    url=QDRANT_URL
+    PointStruct,
+    VectorParams,
 )
 
 
+load_dotenv()
 
 
-embedding_model = TextEmbedding(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
+# ============================================================
+# ENVIRONMENT VARIABLES
+# ============================================================
+
+QDRANT_URL = os.getenv("QDRANT_URL")
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+
+QDRANT_COLLECTION = os.getenv(
+    "QDRANT_COLLECTION",
+    "enterprise_documents_v2",
+)
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+EMBEDDING_MODEL = os.getenv(
+    "EMBEDDING_MODEL",
+    "gemini-embedding-001",
+)
+
+# We explicitly request 768-dimensional embeddings.
+VECTOR_SIZE = int(
+    os.getenv(
+        "EMBEDDING_DIMENSION",
+        "768",
+    )
 )
 
 
+if not QDRANT_URL:
+    raise RuntimeError(
+        "QDRANT_URL environment variable is missing."
+    )
+
+if not GEMINI_API_KEY:
+    raise RuntimeError(
+        "GEMINI_API_KEY environment variable is missing."
+    )
 
 
-def create_collection():
+# ============================================================
+# CLIENTS
+# ============================================================
+
+_qdrant_client: Optional[QdrantClient] = None
+_gemini_client = None
+
+
+def get_qdrant_client() -> QdrantClient:
+    global _qdrant_client
+
+    if _qdrant_client is None:
+        print("Initializing Qdrant client...")
+
+        _qdrant_client = QdrantClient(
+            url=QDRANT_URL,
+            api_key=QDRANT_API_KEY or None,
+            timeout=60,
+        )
+
+        print("Qdrant client initialized.")
+
+    return _qdrant_client
+
+
+def get_gemini_client():
+    global _gemini_client
+
+    if _gemini_client is None:
+        print("Initializing Gemini client...")
+
+        _gemini_client = genai.Client(
+            api_key=GEMINI_API_KEY
+        )
+
+        print("Gemini client initialized.")
+
+    return _gemini_client
+
+
+# ============================================================
+# QDRANT COLLECTION
+# ============================================================
+def ensure_collection() -> None:
+    client = get_qdrant_client()
+
+    from qdrant_client.models import (
+        Distance,
+        PayloadSchemaType,
+        VectorParams,
+    )
 
     try:
+        exists = client.collection_exists(
+            collection_name=QDRANT_COLLECTION
+        )
 
-        collections = client.get_collections()
+        if not exists:
+            print(
+                "Creating Qdrant collection:",
+                QDRANT_COLLECTION,
+            )
 
-        existing_collections = [
-            collection.name
-            for collection in collections.collections
-        ]
-
-        if COLLECTION_NAME in existing_collections:
+            client.create_collection(
+                collection_name=QDRANT_COLLECTION,
+                vectors_config=VectorParams(
+                    size=VECTOR_SIZE,
+                    distance=Distance.COSINE,
+                ),
+            )
 
             print(
-                f"Qdrant collection already exists: "
-                f"{COLLECTION_NAME}"
+                "Qdrant collection created:",
+                QDRANT_COLLECTION,
             )
 
-            return
-
-
-        client.create_collection(
-
-            collection_name=COLLECTION_NAME,
-
-            vectors_config=VectorParams(
-                size=VECTOR_SIZE,
-                distance=Distance.COSINE
+        # Create payload indexes required for filtered search
+        try:
+            client.create_payload_index(
+                collection_name=QDRANT_COLLECTION,
+                field_name="agent_id",
+                field_schema=PayloadSchemaType.KEYWORD,
+                wait=True,
             )
-        )
 
+            print(
+                "Payload index ready: agent_id"
+            )
+
+        except Exception as error:
+            # Qdrant may report that the index already exists.
+            print(
+                "agent_id index:",
+                repr(error),
+            )
+
+        try:
+            client.create_payload_index(
+                collection_name=QDRANT_COLLECTION,
+                field_name="document_id",
+                field_schema=PayloadSchemaType.KEYWORD,
+                wait=True,
+            )
+
+            print(
+                "Payload index ready: document_id"
+            )
+
+        except Exception as error:
+            print(
+                "document_id index:",
+                repr(error),
+            )
+
+    except Exception as error:
         print(
-            f"Created Qdrant collection: "
-            f"{COLLECTION_NAME}"
+            "QDRANT COLLECTION ERROR:",
+            repr(error),
+        )
+        raise
+
+# Keep compatibility with your existing documents.py
+def create_collection() -> None:
+    ensure_collection()
+
+
+# ============================================================
+# GEMINI EMBEDDING
+# ============================================================
+
+def create_embedding(
+    text: str,
+) -> List[float]:
+    if not text:
+        raise ValueError(
+            "Cannot create embedding for empty text."
         )
 
-    except Exception as e:
+    clean_text = text.strip()
 
+    if not clean_text:
+        raise ValueError(
+            "Cannot create embedding for empty text."
+        )
+
+    client = get_gemini_client()
+
+    try:
+        result = client.models.embed_content(
+            model=EMBEDDING_MODEL,
+            contents=clean_text,
+            config=types.EmbedContentConfig(
+                output_dimensionality=VECTOR_SIZE
+            ),
+        )
+
+        if not result.embeddings:
+            raise RuntimeError(
+                "Gemini returned no embeddings."
+            )
+
+        values = result.embeddings[0].values
+
+        if not values:
+            raise RuntimeError(
+                "Gemini embedding is empty."
+            )
+
+        return list(values)
+
+    except Exception as error:
         print(
-            "Qdrant collection creation error:",
-            e
+            "GEMINI EMBEDDING ERROR:",
+            repr(error),
         )
-
         raise
 
 
-
-
-def create_embedding(text: str):
-
-    if not text or not text.strip():
-
-        raise ValueError(
-            "Cannot create embedding for empty text"
-        )
-
-    embeddings = list(
-        embedding_model.embed([text])
-    )
-
-    return embeddings[0].tolist()
-
-
-
+# ============================================================
+# STORE SINGLE CHUNK
+# ============================================================
 
 def store_chunk(
     text: str,
     agent_id: str,
     document_id: str,
     filename: str,
-    chunk_index: int
-):
-
-    if not text or not text.strip():
-
+    chunk_index: int,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> str:
+    if not agent_id:
         raise ValueError(
-            "Cannot store an empty chunk"
+            "agent_id is required."
         )
 
+    if not document_id:
+        raise ValueError(
+            "document_id is required."
+        )
 
+    if not text or not text.strip():
+        raise ValueError(
+            "Chunk text cannot be empty."
+        )
 
+    ensure_collection()
 
-    vector = create_embedding(text)
+    client = get_qdrant_client()
 
-
-
+    embedding = create_embedding(
+        text
+    )
 
     point_id = str(
         uuid.uuid4()
     )
 
-
-
-
-    payload = {
-
-        "text": text,
-
+    payload: Dict[str, Any] = {
         "agent_id": agent_id,
-
         "document_id": document_id,
-
         "filename": filename,
+        "chunk_index": chunk_index,
 
-        "chunk_index": chunk_index
+        # Keep both keys for compatibility
+        "content": text,
+        "text": text,
     }
 
+    if metadata:
+        payload.update(metadata)
 
-
-
-    client.upsert(
-
-        collection_name=COLLECTION_NAME,
-
-        points=[
-
-            PointStruct(
-
-                id=point_id,
-
-                vector=vector,
-
-                payload=payload
-            )
-        ]
+    point = PointStruct(
+        id=point_id,
+        vector=embedding,
+        payload=payload,
     )
 
+    try:
+        client.upsert(
+            collection_name=QDRANT_COLLECTION,
+            points=[point],
+            wait=True,
+        )
 
-    print(
-        f"Indexed chunk "
-        f"{chunk_index + 1}"
-    )
+        return point_id
+
+    except Exception as error:
+        print(
+            "QDRANT STORE ERROR:",
+            repr(error),
+        )
+        raise
 
 
-    return point_id
+# ============================================================
+# STORE MULTIPLE CHUNKS
+# ============================================================
+
+def store_chunks(
+    chunks: List[str],
+    agent_id: str,
+    document_id: str,
+    filename: str,
+) -> int:
+    if not chunks:
+        return 0
+
+    indexed_count = 0
+    total = len(chunks)
+
+    for index, chunk in enumerate(chunks):
+        if not chunk:
+            continue
+
+        clean_chunk = chunk.strip()
+
+        if not clean_chunk:
+            continue
+
+        store_chunk(
+            text=clean_chunk,
+            agent_id=agent_id,
+            document_id=document_id,
+            filename=filename,
+            chunk_index=index,
+        )
+
+        indexed_count += 1
+
+        print(
+            f"Indexed chunk "
+            f"{indexed_count}/{total}"
+        )
+
+    return indexed_count
 
 
-
+# ============================================================
+# SEARCH CHUNKS
+# ============================================================
 
 def search_chunks(
     query: str,
     agent_id: str,
     document_id: Optional[str] = None,
-    limit: int = 5
-):
-    if not query or not query.strip():
+    limit: int = 5,
+) -> List[Dict[str, Any]]:
+    if not query:
         return []
 
-    query_vector = create_embedding(query)
+    clean_query = query.strip()
 
-    conditions = [
+    if not clean_query:
+        return []
+
+    if not agent_id:
+        raise ValueError(
+            "agent_id is required."
+        )
+
+    ensure_collection()
+
+    client = get_qdrant_client()
+
+    query_vector = create_embedding(
+        clean_query
+    )
+
+    must_conditions = [
         FieldCondition(
             key="agent_id",
             match=MatchValue(
                 value=agent_id
-            )
+            ),
         )
     ]
 
     if document_id:
-        conditions.append(
+        must_conditions.append(
             FieldCondition(
                 key="document_id",
                 match=MatchValue(
                     value=document_id
-                )
+                ),
             )
         )
 
-    query_filter = Filter(
-        must=conditions
+    search_filter = Filter(
+        must=must_conditions
     )
 
     try:
         response = client.query_points(
-            collection_name=COLLECTION_NAME,
+            collection_name=QDRANT_COLLECTION,
             query=query_vector,
-            query_filter=query_filter,
+            query_filter=search_filter,
             limit=limit,
             with_payload=True,
         )
 
         points = response.points
 
-        formatted_results = []
+    except AttributeError:
+        points = client.search(
+            collection_name=QDRANT_COLLECTION,
+            query_vector=query_vector,
+            query_filter=search_filter,
+            limit=limit,
+            with_payload=True,
+        )
 
-        for result in points:
-            payload = result.payload or {}
+    except Exception as error:
+        print(
+            "QDRANT SEARCH ERROR:",
+            repr(error),
+        )
+        raise
 
-            formatted_results.append({
-                "score": result.score,
-                "text": payload.get(
-                    "text",
-                    ""
-                ),
+    results: List[Dict[str, Any]] = []
+
+    for point in points:
+        payload = point.payload or {}
+
+        content = (
+            payload.get("content")
+            or payload.get("text")
+            or ""
+        )
+
+        results.append(
+            {
+                "content": content,
+                "text": content,
                 "agent_id": payload.get(
                     "agent_id"
                 ),
@@ -246,36 +463,109 @@ def search_chunks(
                 ),
                 "chunk_index": payload.get(
                     "chunk_index"
-                )
-            })
+                ),
+                "score": float(
+                    point.score
+                ),
+            }
+        )
 
-        return formatted_results
+    print(
+        f"Retrieved {len(results)} chunks"
+    )
 
-    except Exception as e:
+    for result in results:
         print(
-            "QDRANT SEARCH ERROR:",
-            repr(e)
+            "SOURCE:",
+            result.get("filename"),
+            "score:",
+            result.get("score"),
+        )
+
+    return results
+
+
+# ============================================================
+# DELETE DOCUMENT CHUNKS
+# ============================================================
+
+def delete_document_chunks(
+    agent_id: str,
+    document_id: str,
+) -> None:
+    if not agent_id:
+        raise ValueError(
+            "agent_id is required."
+        )
+
+    if not document_id:
+        raise ValueError(
+            "document_id is required."
+        )
+
+    ensure_collection()
+
+    client = get_qdrant_client()
+
+    delete_filter = Filter(
+        must=[
+            FieldCondition(
+                key="agent_id",
+                match=MatchValue(
+                    value=agent_id
+                ),
+            ),
+            FieldCondition(
+                key="document_id",
+                match=MatchValue(
+                    value=document_id
+                ),
+            ),
+        ]
+    )
+
+    try:
+        client.delete(
+            collection_name=QDRANT_COLLECTION,
+            points_selector=FilterSelector(
+                filter=delete_filter
+            ),
+            wait=True,
+        )
+
+        print(
+            "Deleted chunks for document:",
+            document_id,
+        )
+
+    except Exception as error:
+        print(
+            "QDRANT DELETE ERROR:",
+            repr(error),
         )
         raise
 
 
+# ============================================================
+# CONNECTION TEST
+# ============================================================
 
-if __name__ == "__main__":
+def check_qdrant_connection() -> bool:
+    try:
+        client = get_qdrant_client()
 
-    print(
-        "Testing Qdrant connection..."
-    )
+        client.get_collections()
 
-    collections = client.get_collections()
+        print(
+            "Qdrant connection successful."
+        )
 
-    print(
-        "Qdrant connected successfully!"
-    )
+        return True
 
-    print(
-        "Collections:",
-        [
-            collection.name
-            for collection in collections.collections
-        ]
-    )
+    except Exception as error:
+        print(
+            "Qdrant connection failed:",
+            repr(error),
+        )
+
+        return False

@@ -2,6 +2,7 @@
 
 import {
   FormEvent,
+  Suspense,
   useEffect,
   useRef,
   useState,
@@ -30,7 +31,43 @@ interface Message {
   sources?: ChatSource[];
 }
 
-export default function ChatPage() {
+function normalizeHistoryResponse(
+  response: unknown
+): Message[] {
+  const data = response as any;
+
+  const rawMessages = Array.isArray(response)
+    ? response
+    : Array.isArray(data?.messages)
+      ? data.messages
+      : Array.isArray(data?.history)
+        ? data.history
+        : Array.isArray(data?.chats)
+          ? data.chats
+          : [];
+
+  return rawMessages.map(
+    (message: any, index: number) => ({
+      id:
+        message?.id ||
+        message?.message_id ||
+        `history-${index}-${Date.now()}`,
+      role:
+        message?.role === "user"
+          ? "user"
+          : "assistant",
+      content:
+        message?.content ||
+        message?.message ||
+        "",
+      sources: Array.isArray(message?.sources)
+        ? message.sources
+        : [],
+    })
+  );
+}
+
+function ChatPageContent() {
   const searchParams =
     useSearchParams();
 
@@ -109,13 +146,14 @@ export default function ChatPage() {
           documentId
         );
 
-      const restored: Message[] =
-        response.messages.map(
-          (message, index) => ({
-            id: `history-${index}-${Date.now()}`,
-            role: message.role,
-            content: message.content,
-          })
+      console.log(
+        "CHAT HISTORY RESPONSE:",
+        response
+      );
+
+      const restored =
+        normalizeHistoryResponse(
+          response
         );
 
       setMessages(restored);
@@ -169,9 +207,14 @@ export default function ChatPage() {
             storedAgentId
           );
 
-        const availableDocuments =
-          documentResponse.documents ||
-          [];
+        const availableDocuments: DocumentItem[] =
+          Array.isArray(documentResponse)
+            ? documentResponse
+            : Array.isArray(
+                (documentResponse as any)?.documents
+              )
+              ? (documentResponse as any).documents
+              : [];
 
         setDocuments(
           availableDocuments
@@ -227,14 +270,14 @@ export default function ChatPage() {
               initialDocumentId
             );
 
-          const restoredMessages:
-            Message[] =
-            historyResponse.messages.map(
-              (message, index) => ({
-                id: `initial-${index}-${Date.now()}`,
-                role: message.role,
-                content: message.content,
-              })
+          console.log(
+            "INITIAL CHAT HISTORY RESPONSE:",
+            historyResponse
+          );
+
+          const restoredMessages =
+            normalizeHistoryResponse(
+              historyResponse
             );
 
           setMessages(
@@ -449,6 +492,8 @@ export default function ChatPage() {
         document.status ===
         "Indexed"
     );
+
+    
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
@@ -861,5 +906,31 @@ export default function ChatPage() {
       </div>
 
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 p-6">
+          <div className="mx-auto flex min-h-[85vh] max-w-5xl items-center justify-center rounded-2xl border bg-white shadow-sm">
+            <div className="text-center">
+              <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+
+              <h2 className="mt-5 text-lg font-semibold text-slate-800">
+                Loading Enterprise AI Chat
+              </h2>
+
+              <p className="mt-2 text-sm text-slate-500">
+                Preparing your documents and chat history...
+              </p>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <ChatPageContent />
+    </Suspense>
   );
 }
