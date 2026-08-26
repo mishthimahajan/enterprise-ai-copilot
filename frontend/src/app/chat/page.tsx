@@ -2,6 +2,7 @@
 
 import {
   FormEvent,
+  Suspense,
   useEffect,
   useRef,
   useState,
@@ -66,7 +67,7 @@ function normalizeHistoryResponse(
   );
 }
 
-export default function ChatPage() {
+function ChatPageContent() {
   const searchParams =
     useSearchParams();
 
@@ -492,6 +493,8 @@ export default function ChatPage() {
         "Indexed"
     );
 
+    
+
   return (
     <div className="min-h-screen bg-slate-50 p-6">
 
@@ -903,5 +906,31 @@ export default function ChatPage() {
       </div>
 
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 p-6">
+          <div className="mx-auto flex min-h-[85vh] max-w-5xl items-center justify-center rounded-2xl border bg-white shadow-sm">
+            <div className="text-center">
+              <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+
+              <h2 className="mt-5 text-lg font-semibold text-slate-800">
+                Loading Enterprise AI Chat
+              </h2>
+
+              <p className="mt-2 text-sm text-slate-500">
+                Preparing your documents and chat history...
+              </p>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <ChatPageContent />
+    </Suspense>
   );
 }
