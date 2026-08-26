@@ -525,16 +525,19 @@ async def upload_document(
                 }
             }
         )
+        print(
+        "DOCUMENT INDEXING ERROR:",
+        repr(e),
+        flush=True,
+        )
 
         raise HTTPException(
-
             status_code=500,
-
             detail=(
-                "Document uploaded but "
-                "indexing failed"
-            )
+            "Document uploaded but indexing failed"
+            ),
         )
+        
 
    #response
 
