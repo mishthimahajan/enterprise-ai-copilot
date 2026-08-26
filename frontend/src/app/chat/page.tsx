@@ -30,6 +30,42 @@ interface Message {
   sources?: ChatSource[];
 }
 
+function normalizeHistoryResponse(
+  response: unknown
+): Message[] {
+  const data = response as any;
+
+  const rawMessages = Array.isArray(response)
+    ? response
+    : Array.isArray(data?.messages)
+      ? data.messages
+      : Array.isArray(data?.history)
+        ? data.history
+        : Array.isArray(data?.chats)
+          ? data.chats
+          : [];
+
+  return rawMessages.map(
+    (message: any, index: number) => ({
+      id:
+        message?.id ||
+        message?.message_id ||
+        `history-${index}-${Date.now()}`,
+      role:
+        message?.role === "user"
+          ? "user"
+          : "assistant",
+      content:
+        message?.content ||
+        message?.message ||
+        "",
+      sources: Array.isArray(message?.sources)
+        ? message.sources
+        : [],
+    })
+  );
+}
+
 export default function ChatPage() {
   const searchParams =
     useSearchParams();
@@ -109,13 +145,14 @@ export default function ChatPage() {
           documentId
         );
 
-      const restored: Message[] =
-        response.messages.map(
-          (message, index) => ({
-            id: `history-${index}-${Date.now()}`,
-            role: message.role,
-            content: message.content,
-          })
+      console.log(
+        "CHAT HISTORY RESPONSE:",
+        response
+      );
+
+      const restored =
+        normalizeHistoryResponse(
+          response
         );
 
       setMessages(restored);
@@ -169,9 +206,14 @@ export default function ChatPage() {
             storedAgentId
           );
 
-        const availableDocuments =
-          documentResponse.documents ||
-          [];
+        const availableDocuments: DocumentItem[] =
+          Array.isArray(documentResponse)
+            ? documentResponse
+            : Array.isArray(
+                (documentResponse as any)?.documents
+              )
+              ? (documentResponse as any).documents
+              : [];
 
         setDocuments(
           availableDocuments
@@ -227,14 +269,14 @@ export default function ChatPage() {
               initialDocumentId
             );
 
-          const restoredMessages:
-            Message[] =
-            historyResponse.messages.map(
-              (message, index) => ({
-                id: `initial-${index}-${Date.now()}`,
-                role: message.role,
-                content: message.content,
-              })
+          console.log(
+            "INITIAL CHAT HISTORY RESPONSE:",
+            historyResponse
+          );
+
+          const restoredMessages =
+            normalizeHistoryResponse(
+              historyResponse
             );
 
           setMessages(
