@@ -3,26 +3,49 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-
-
+from google import genai
+from google.genai import types
+from qdrant_client import QdrantClient
+from qdrant_client.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    FilterSelector,
+    MatchValue,
+    PointStruct,
+    VectorParams,
+)
 
 
 load_dotenv()
+
+
+# ============================================================
+# ENVIRONMENT VARIABLES
+# ============================================================
 
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
 QDRANT_COLLECTION = os.getenv(
     "QDRANT_COLLECTION",
-    "enterprise_documents",
+    "enterprise_documents_v2",
 )
 
-EMBEDDING_MODEL_NAME = os.getenv(
-    "EMBEDDING_MODEL_NAME",
-    "sentence-transformers/all-MiniLM-L6-v2",
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+EMBEDDING_MODEL = os.getenv(
+    "EMBEDDING_MODEL",
+    "gemini-embedding-001",
 )
 
-VECTOR_SIZE = 384
+# We explicitly request 768-dimensional embeddings.
+VECTOR_SIZE = int(
+    os.getenv(
+        "EMBEDDING_DIMENSION",
+        "768",
+    )
+)
 
 
 if not QDRANT_URL:
@@ -30,31 +53,25 @@ if not QDRANT_URL:
         "QDRANT_URL environment variable is missing."
     )
 
+if not GEMINI_API_KEY:
+    raise RuntimeError(
+        "GEMINI_API_KEY environment variable is missing."
+    )
 
 
+# ============================================================
+# CLIENTS
+# ============================================================
 
-_qdrant_client = None
-_embedding_model = None
+_qdrant_client: Optional[QdrantClient] = None
+_gemini_client = None
 
 
-
-
-def get_qdrant_client():
-    """
-    Create Qdrant client only when a RAG operation
-    actually needs it.
-
-    This prevents Qdrant/FastEmbed/ONNX initialization
-    during FastAPI startup on Render.
-    """
-
+def get_qdrant_client() -> QdrantClient:
     global _qdrant_client
 
     if _qdrant_client is None:
         print("Initializing Qdrant client...")
-
-        
-        from qdrant_client import QdrantClient
 
         _qdrant_client = QdrantClient(
             url=QDRANT_URL,
@@ -67,51 +84,27 @@ def get_qdrant_client():
     return _qdrant_client
 
 
+def get_gemini_client():
+    global _gemini_client
 
+    if _gemini_client is None:
+        print("Initializing Gemini client...")
 
-def get_embedding_model():
-    """
-    Load SentenceTransformer only when an embedding
-    is actually required.
-
-    FastAPI can therefore start without loading Torch,
-    HuggingFace, ONNX, etc.
-    """
-
-    global _embedding_model
-
-    if _embedding_model is None:
-        print("Loading embedding model...")
-
-        
-        from sentence_transformers import SentenceTransformer
-
-        _embedding_model = SentenceTransformer(
-            EMBEDDING_MODEL_NAME
+        _gemini_client = genai.Client(
+            api_key=GEMINI_API_KEY
         )
 
-        print(
-            "Embedding model loaded:",
-            EMBEDDING_MODEL_NAME,
-        )
+        print("Gemini client initialized.")
 
-    return _embedding_model
+    return _gemini_client
 
 
-
+# ============================================================
+# QDRANT COLLECTION
+# ============================================================
 
 def ensure_collection() -> None:
-    """
-    Create Qdrant collection if it does not exist.
-    """
-
     client = get_qdrant_client()
-
-    # Lazy imports
-    from qdrant_client.models import (
-        Distance,
-        VectorParams,
-    )
 
     try:
         exists = client.collection_exists(
@@ -144,31 +137,21 @@ def ensure_collection() -> None:
             "QDRANT COLLECTION ERROR:",
             repr(error),
         )
-
         raise
 
 
-# ============================================================
-# BACKWARD COMPATIBILITY
-# ============================================================
-
+# Keep compatibility with your existing documents.py
 def create_collection() -> None:
-    """
-    Existing documents.py may still call
-    create_collection().
-    """
-
     ensure_collection()
 
 
 # ============================================================
-# EMBEDDING
+# GEMINI EMBEDDING
 # ============================================================
 
 def create_embedding(
     text: str,
 ) -> List[float]:
-
     if not text:
         raise ValueError(
             "Cannot create embedding for empty text."
@@ -181,14 +164,37 @@ def create_embedding(
             "Cannot create embedding for empty text."
         )
 
-    model = get_embedding_model()
+    client = get_gemini_client()
 
-    embedding = model.encode(
-        clean_text,
-        normalize_embeddings=True,
-    )
+    try:
+        result = client.models.embed_content(
+            model=EMBEDDING_MODEL,
+            contents=clean_text,
+            config=types.EmbedContentConfig(
+                output_dimensionality=VECTOR_SIZE
+            ),
+        )
 
-    return embedding.tolist()
+        if not result.embeddings:
+            raise RuntimeError(
+                "Gemini returned no embeddings."
+            )
+
+        values = result.embeddings[0].values
+
+        if not values:
+            raise RuntimeError(
+                "Gemini embedding is empty."
+            )
+
+        return list(values)
+
+    except Exception as error:
+        print(
+            "GEMINI EMBEDDING ERROR:",
+            repr(error),
+        )
+        raise
 
 
 # ============================================================
@@ -201,11 +207,8 @@ def store_chunk(
     document_id: str,
     filename: str,
     chunk_index: int,
-    metadata: Optional[
-        Dict[str, Any]
-    ] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> str:
-
     if not agent_id:
         raise ValueError(
             "agent_id is required."
@@ -225,11 +228,6 @@ def store_chunk(
 
     client = get_qdrant_client()
 
-    # Lazy import
-    from qdrant_client.models import (
-        PointStruct,
-    )
-
     embedding = create_embedding(
         text
     )
@@ -244,15 +242,13 @@ def store_chunk(
         "filename": filename,
         "chunk_index": chunk_index,
 
-        # Keep both for compatibility
+        # Keep both keys for compatibility
         "content": text,
         "text": text,
     }
 
     if metadata:
-        payload.update(
-            metadata
-        )
+        payload.update(metadata)
 
     point = PointStruct(
         id=point_id,
@@ -274,7 +270,6 @@ def store_chunk(
             "QDRANT STORE ERROR:",
             repr(error),
         )
-
         raise
 
 
@@ -288,17 +283,13 @@ def store_chunks(
     document_id: str,
     filename: str,
 ) -> int:
-
     if not chunks:
         return 0
 
     indexed_count = 0
-
     total = len(chunks)
 
-    for index, chunk in enumerate(
-        chunks
-    ):
+    for index, chunk in enumerate(chunks):
         if not chunk:
             continue
 
@@ -326,7 +317,7 @@ def store_chunks(
 
 
 # ============================================================
-# SEARCH
+# SEARCH CHUNKS
 # ============================================================
 
 def search_chunks(
@@ -335,7 +326,6 @@ def search_chunks(
     document_id: Optional[str] = None,
     limit: int = 5,
 ) -> List[Dict[str, Any]]:
-
     if not query:
         return []
 
@@ -353,18 +343,11 @@ def search_chunks(
 
     client = get_qdrant_client()
 
-    # Lazy imports
-    from qdrant_client.models import (
-        FieldCondition,
-        Filter,
-        MatchValue,
-    )
-
     query_vector = create_embedding(
         clean_query
     )
 
-    conditions = [
+    must_conditions = [
         FieldCondition(
             key="agent_id",
             match=MatchValue(
@@ -374,7 +357,7 @@ def search_chunks(
     ]
 
     if document_id:
-        conditions.append(
+        must_conditions.append(
             FieldCondition(
                 key="document_id",
                 match=MatchValue(
@@ -384,7 +367,7 @@ def search_chunks(
         )
 
     search_filter = Filter(
-        must=conditions
+        must=must_conditions
     )
 
     try:
@@ -399,8 +382,6 @@ def search_chunks(
         points = response.points
 
     except AttributeError:
-        # For older qdrant-client versions
-
         points = client.search(
             collection_name=QDRANT_COLLECTION,
             query_vector=query_vector,
@@ -414,17 +395,12 @@ def search_chunks(
             "QDRANT SEARCH ERROR:",
             repr(error),
         )
-
         raise
 
-    results: List[
-        Dict[str, Any]
-    ] = []
+    results: List[Dict[str, Any]] = []
 
     for point in points:
-        payload = (
-            point.payload or {}
-        )
+        payload = point.payload or {}
 
         content = (
             payload.get("content")
@@ -432,69 +408,51 @@ def search_chunks(
             or ""
         )
 
-        result = {
-            "content": content,
-            "text": content,
-
-            "agent_id":
-                payload.get(
+        results.append(
+            {
+                "content": content,
+                "text": content,
+                "agent_id": payload.get(
                     "agent_id"
                 ),
-
-            "document_id":
-                payload.get(
+                "document_id": payload.get(
                     "document_id"
                 ),
-
-            "filename":
-                payload.get(
+                "filename": payload.get(
                     "filename"
                 ),
-
-            "chunk_index":
-                payload.get(
+                "chunk_index": payload.get(
                     "chunk_index"
                 ),
-
-            "score":
-                float(
+                "score": float(
                     point.score
                 ),
-        }
-
-        results.append(
-            result
+            }
         )
 
     print(
-        f"Retrieved "
-        f"{len(results)} chunks"
+        f"Retrieved {len(results)} chunks"
     )
 
     for result in results:
         print(
             "SOURCE:",
-            result.get(
-                "filename"
-            ),
+            result.get("filename"),
             "score:",
-            result.get(
-                "score"
-            ),
+            result.get("score"),
         )
 
     return results
 
 
 # ============================================================
-# DELETE DOCUMENT VECTORS
+# DELETE DOCUMENT CHUNKS
 # ============================================================
 
 def delete_document_chunks(
     agent_id: str,
     document_id: str,
 ) -> None:
-
     if not agent_id:
         raise ValueError(
             "agent_id is required."
@@ -509,14 +467,6 @@ def delete_document_chunks(
 
     client = get_qdrant_client()
 
-    # Lazy imports
-    from qdrant_client.models import (
-        FieldCondition,
-        Filter,
-        FilterSelector,
-        MatchValue,
-    )
-
     delete_filter = Filter(
         must=[
             FieldCondition(
@@ -525,7 +475,6 @@ def delete_document_chunks(
                     value=agent_id
                 ),
             ),
-
             FieldCondition(
                 key="document_id",
                 match=MatchValue(
@@ -538,11 +487,9 @@ def delete_document_chunks(
     try:
         client.delete(
             collection_name=QDRANT_COLLECTION,
-
             points_selector=FilterSelector(
                 filter=delete_filter
             ),
-
             wait=True,
         )
 
@@ -556,7 +503,6 @@ def delete_document_chunks(
             "QDRANT DELETE ERROR:",
             repr(error),
         )
-
         raise
 
 
@@ -565,13 +511,6 @@ def delete_document_chunks(
 # ============================================================
 
 def check_qdrant_connection() -> bool:
-    """
-    Optional connection test.
-
-    DO NOT automatically execute this during
-    main.py import.
-    """
-
     try:
         client = get_qdrant_client()
 
