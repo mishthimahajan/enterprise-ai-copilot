@@ -8,7 +8,7 @@ from api.agents import router as agents_router
 from api.documents import router as documents_router
 from api.chat import router as chat_router
 from api.dashboard import router as dashboard_router
-
+from api.github import  router as github_router
 
 app = FastAPI(
     title="Enterprise AI Copilot API",
@@ -43,6 +43,9 @@ app.include_router(agents_router)
 app.include_router(documents_router)
 app.include_router(chat_router)
 app.include_router(dashboard_router)
+app.include_router(
+    github_router
+)
 
 
 @app.get("/")

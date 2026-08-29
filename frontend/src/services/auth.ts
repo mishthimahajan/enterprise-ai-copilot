@@ -1,86 +1,9 @@
-// import axios from "axios";
-
-// import {
-//   LoginRequest,
-//   RegisterRequest,
-//   AuthResponse,
-// } from "@/types/auth";
-
-
-// const API = axios.create({
-//   baseURL: "http://127.0.0.1:8000",
-//   headers: {
-//     "Content-Type": "application/json",
-//   },
-// });
-
-
-// export const login = async (
-//   data: LoginRequest
-// ): Promise<AuthResponse> => {
-
-//   const response = await API.post(
-//     "/login",
-//     data
-//   );
-
-//   if (typeof window !== "undefined") {
-//     localStorage.setItem(
-//       "token",
-//       response.data.access_token
-//     );
-//   }
-
-//   return response.data;
-// };
-
-
-// export const register = async (
-//   data: RegisterRequest
-// ) => {
-
-//   const response = await API.post(
-//     "/register",
-//     data
-//   );
-
-//   return response.data;
-// };
-
-
-// export const logout = () => {
-
-//   if (typeof window !== "undefined") {
-//     localStorage.removeItem("token");
-//   }
-// };
-
-
-// export const getToken = () => {
-
-//   if (typeof window === "undefined") {
-//     return null;
-//   }
-
-//   return localStorage.getItem("token");
-// };
-
-
-// export const isAuthenticated = () => {
-
-//   if (typeof window === "undefined") {
-//     return false;
-//   }
-
-//   return !!localStorage.getItem("token");
-// };
-
-
-// export default API;
-
-
 import API from "./api";
 
+
+// =========================================================
+// TYPES
+// =========================================================
 
 export interface RegisterData {
   name: string;
@@ -114,10 +37,16 @@ export interface AuthResponse {
 }
 
 
+// =========================================================
+// REGISTER
+// =========================================================
+
 export async function registerUser(
   data: RegisterData
 ): Promise<AuthResponse> {
+
   try {
+
     const response =
       await API.post<AuthResponse>(
         "/register",
@@ -128,36 +57,97 @@ export async function registerUser(
 
   } catch (error: any) {
 
+    console.error(
+      "REGISTER API ERROR:",
+      {
+        status:
+          error.response?.status,
+
+        data:
+          error.response?.data,
+
+        message:
+          error.message,
+
+        url:
+          error.config?.baseURL +
+          error.config?.url,
+      }
+    );
+
+
     const detail =
       error.response?.data?.detail;
 
+
+    // Backend returned simple error message
     if (
       typeof detail === "string"
     ) {
-      throw new Error(detail);
+      throw new Error(
+        detail
+      );
     }
 
+
+    // FastAPI validation error
+    if (
+      Array.isArray(detail)
+    ) {
+
+      const message =
+        detail
+          .map(
+            (item: any) =>
+              item?.msg ||
+              "Invalid input"
+          )
+          .join(", ");
+
+
+      throw new Error(
+        message
+      );
+    }
+
+
+    // Backend could not be reached
+    if (!error.response) {
+      throw new Error(
+        "Unable to connect to the backend API."
+      );
+    }
+
+
     throw new Error(
-      "Registration failed."
+      `Registration failed (${error.response.status}).`
     );
   }
 }
 
 
+// =========================================================
+// LOGIN
+// =========================================================
+
 export async function loginUser(
   data: LoginData
 ): Promise<AuthResponse> {
+
   try {
+
     const response =
       await API.post<AuthResponse>(
         "/login",
         data
       );
 
+
     const result =
       response.data;
 
 
+    // Support both possible backend names.
     const token =
       result.access_token ||
       result.token;
@@ -170,24 +160,136 @@ export async function loginUser(
     }
 
 
-    localStorage.setItem(
-      "access_token",
-      token
-    );
+    // =====================================================
+    // CLEAR PREVIOUS USER WORKSPACE
+    // =====================================================
+
+    /*
+     * Important:
+     *
+     * Suppose User A selected:
+     *
+     * Engineering Agent
+     *
+     * and then User B logs in using the
+     * same browser.
+     *
+     * User B should NOT automatically
+     * inherit User A's selected workspace.
+     */
+
+    if (
+      typeof window !== "undefined"
+    ) {
+
+      localStorage.removeItem(
+        "selected_agent_id"
+      );
+
+      localStorage.removeItem(
+        "selected_document_id"
+      );
+
+      localStorage.removeItem(
+        "selected_repository_id"
+      );
+
+
+      // Remove old token key if it exists.
+      // We now consistently use access_token.
+      localStorage.removeItem(
+        "token"
+      );
+
+
+      localStorage.setItem(
+        "access_token",
+        token
+      );
+
+
+      
+      if (result.user) {
+
+        localStorage.setItem(
+          "user",
+          JSON.stringify(
+            result.user
+          )
+        );
+
+      } else {
+
+        
+        localStorage.removeItem(
+          "user"
+        );
+      }
+    }
 
 
     return result;
 
   } catch (error: any) {
 
+    console.error(
+      "LOGIN API ERROR:",
+      {
+        status:
+          error.response?.status,
+
+        data:
+          error.response?.data,
+
+        message:
+          error.message,
+
+        url:
+          error.config?.baseURL +
+          error.config?.url,
+      }
+    );
+
+
     const detail =
       error.response?.data?.detail;
+
 
     if (
       typeof detail === "string"
     ) {
-      throw new Error(detail);
+      throw new Error(
+        detail
+      );
     }
+
+
+    if (
+      Array.isArray(detail)
+    ) {
+
+      const message =
+        detail
+          .map(
+            (item: any) =>
+              item?.msg ||
+              "Invalid input"
+          )
+          .join(", ");
+
+
+      throw new Error(
+        message
+      );
+    }
+
+
+    if (!error.response) {
+      throw new Error(
+        "Unable to connect to the backend API."
+      );
+    }
+
 
     throw new Error(
       error.message ||
@@ -197,21 +299,50 @@ export async function loginUser(
 }
 
 
+
+
 export function logoutUser() {
+
   if (
     typeof window === "undefined"
   ) {
     return;
   }
 
+
+  
   localStorage.removeItem(
     "access_token"
   );
 
+
+  
+  localStorage.removeItem(
+    "token"
+  );
+
+
+
+
   localStorage.removeItem(
     "selected_agent_id"
   );
+
+  localStorage.removeItem(
+    "selected_document_id"
+  );
+
+  localStorage.removeItem(
+    "selected_repository_id"
+  );
+
+
+  // User information
+  localStorage.removeItem(
+    "user"
+  );
 }
+
 
 
 export function getToken():
@@ -224,9 +355,11 @@ export function getToken():
   }
 
   return localStorage.getItem(
-    "token"
+    "access_token"
   );
 }
+
+
 
 
 export function isAuthenticated():
@@ -235,4 +368,45 @@ export function isAuthenticated():
   return Boolean(
     getToken()
   );
+}
+
+
+// =========================================================
+// GET CURRENT USER
+// =========================================================
+
+export function getCurrentUser() {
+
+  if (
+    typeof window === "undefined"
+  ) {
+    return null;
+  }
+
+
+  const user =
+    localStorage.getItem(
+      "user"
+    );
+
+
+  if (!user) {
+    return null;
+  }
+
+
+  try {
+
+    return JSON.parse(
+      user
+    );
+
+  } catch {
+
+    localStorage.removeItem(
+      "user"
+    );
+
+    return null;
+  }
 }

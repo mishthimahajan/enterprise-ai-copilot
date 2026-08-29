@@ -4,478 +4,673 @@ from fastapi import (
     File,
     Depends,
     HTTPException,
-    Query
+    Query,
 )
 
-from datetime import datetime, timezone
+from datetime import (
+    datetime,
+    timezone,
+)
+
 from pathlib import Path
 import uuid
 
-from database.mongodb import documents_collection, agents_collection
-from utils.auth import decode_access_token
+from database.mongodb import (
+    documents_collection,
+    agents_collection,
+)
+
+from utils.auth import (
+    decode_access_token,
+)
 
 from services.qdrant_service import (
     create_collection,
-    store_chunk
+    store_chunk,
 )
 
-from services.parser import parse_document
-from services.chunker import chunk_text
+from services.parser import (
+    parse_document,
+)
+
+from services.chunker import (
+    chunk_text,
+)
 
 
 router = APIRouter(
     prefix="/documents",
-    tags=["Documents"]
+    tags=["Documents"],
 )
 
 
-UPLOAD_DIR = Path("uploads/documents")
+# =========================================================
+# UPLOAD DIRECTORY
+# =========================================================
+
+UPLOAD_DIR = Path(
+    "uploads/documents"
+)
 
 UPLOAD_DIR.mkdir(
     parents=True,
-    exist_ok=True
+    exist_ok=True,
 )
 
 
+# =========================================================
+# AUTHENTICATION HELPER
+# =========================================================
 
+def get_authenticated_user_id(
+    token: dict,
+) -> str:
+
+    user_id = token.get(
+        "user_id"
+    )
+
+    if not user_id:
+
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "Invalid authentication token"
+            ),
+        )
+
+    return user_id
+
+
+# =========================================================
+# VERIFY SHARED AGENT ACCESS
+# =========================================================
 
 def verify_agent_access(
     agent_id: str,
-    user_id: str
 ):
+    """
+    Agents are organization-wide shared
+    workspaces.
 
-    agent = agents_collection.find_one(
-        {
-            "agent_id": agent_id
-        }
+    Any authenticated user may use any
+    active shared agent.
+
+    This function only verifies that:
+    1. The agent exists.
+    2. The agent is active.
+    """
+
+    agent = (
+        agents_collection.find_one(
+            {
+                "agent_id":
+                    agent_id
+            }
+        )
     )
+
 
     if not agent:
+
         raise HTTPException(
             status_code=404,
-            detail="Agent not found"
+            detail="Agent not found",
         )
 
-    owner_id = agent.get(
-        "owner_id"
-    )
 
-    members = agent.get(
-        "members",
-        []
-    )
+    if (
+        agent.get(
+            "is_active",
+            True,
+        )
+        is False
+    ):
 
-    # Owner has access
-    if owner_id == user_id:
-        return agent
-
-    # Member has access
-    if user_id in members:
-        return agent
-
-    raise HTTPException(
-        status_code=403,
-        detail="You are not a member of this agent"
-    )
+        raise HTTPException(
+            status_code=404,
+            detail="Agent not found",
+        )
 
 
+    return agent
 
+
+# =========================================================
+# GET DOCUMENTS FOR SHARED AGENT
+# =========================================================
 
 @router.get("")
 def get_documents(
     agent_id: str = Query(...),
+
     token: dict = Depends(
         decode_access_token
-    )
+    ),
 ):
 
-    user_id = token.get(
-        "user_id"
+    # Require user to be authenticated.
+    get_authenticated_user_id(
+        token
     )
 
-    if not user_id:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authentication token"
-        )
+
+    # Shared agent:
+    # no owner/member restriction.
+    verify_agent_access(
+        agent_id
+    )
+
 
     
-    verify_agent_access(
-        agent_id,
-        user_id
-    )
 
     documents = list(
         documents_collection.find(
             {
-                "agent_id": agent_id
+                "agent_id":
+                    agent_id
             }
         ).sort(
             "uploaded_at",
-            -1
+            -1,
         )
     )
 
+
     result = []
+
 
     for document in documents:
 
-        result.append({
+        result.append(
+            {
+                "id":
+                    str(
+                        document["_id"]
+                    ),
 
-            "id": str(
-                document["_id"]
-            ),
+                "document_id":
+                    document.get(
+                        "document_id"
+                    ),
 
-            "document_id": document.get(
-                "document_id"
-            ),
+                "name":
+                    document.get(
+                        "name",
+                        "",
+                    ),
 
-            "name": document.get(
-                "name"
-            ),
+                "type":
+                    document.get(
+                        "type",
+                        "",
+                    ),
 
-            "type": document.get(
-                "type"
-            ),
+                "size":
+                    document.get(
+                        "size",
+                        0,
+                    ),
 
-            "size": document.get(
-                "size",
-                0
-            ),
+                "status":
+                    document.get(
+                        "status",
+                        "Processing",
+                    ),
 
-            "status": document.get(
-                "status",
-                "Processing"
-            ),
+                "progress":
+                    document.get(
+                        "progress",
+                        0,
+                    ),
 
-            "progress": document.get(
-                "progress",
-                0
-            ),
+                "uploaded_at":
+                    document.get(
+                        "uploaded_at"
+                    ),
 
-            "uploaded_at": document.get(
-                "uploaded_at"
-            ),
+                "chunks":
+                    document.get(
+                        "chunks",
+                        0,
+                    ),
 
-            "chunks": document.get(
-                "chunks",
-                0
-            ),
+                "agent_id":
+                    document.get(
+                        "agent_id"
+                    ),
 
-            "agent_id": document.get(
-                "agent_id"
-            )
-        })
+                # Audit information only.
+                "uploaded_by":
+                    document.get(
+                        "uploaded_by"
+                    ),
+            }
+        )
+
 
     return {
-        "documents": result,
-        "total": len(result),
+        "documents":
+            result,
 
-        "indexed": sum(
-            1
-            for doc in result
-            if doc["status"] == "Indexed"
-        ),
+        "total":
+            len(result),
 
-        "chunks": sum(
-            doc["chunks"] or 0
-            for doc in result
-        )
+        "indexed":
+            sum(
+                1
+                for doc in result
+                if (
+                    doc["status"]
+                    == "Indexed"
+                )
+            ),
+
+        "chunks":
+            sum(
+                doc["chunks"] or 0
+                for doc in result
+            ),
     }
 
 
-
+# =========================================================
+# UPLOAD DOCUMENT TO SHARED AGENT
+# =========================================================
 
 @router.post("/upload")
 async def upload_document(
     agent_id: str = Query(...),
+
     file: UploadFile = File(...),
+
     token: dict = Depends(
         decode_access_token
-    )
+    ),
 ):
 
-    user_id = token.get(
-        "user_id"
-    )
-
-    if not user_id:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authentication token"
+    user_id = (
+        get_authenticated_user_id(
+            token
         )
-
-    
-
-    verify_agent_access(
-        agent_id,
-        user_id
     )
 
-    
+
+    # Shared agent:
+    # any authenticated user may upload
+    # to any active agent.
+    verify_agent_access(
+        agent_id
+    )
+
+
+    # =====================================================
+    # VALIDATE FILE
+    # =====================================================
 
     if not file.filename:
 
         raise HTTPException(
             status_code=400,
-            detail="Filename is required"
+            detail=(
+                "Filename is required"
+            ),
         )
+
 
     allowed_extensions = {
         ".pdf",
         ".docx",
         ".txt",
-        ".md"
+        ".md",
     }
+
 
     extension = Path(
         file.filename
     ).suffix.lower()
 
-    if extension not in allowed_extensions:
+
+    if (
+        extension
+        not in allowed_extensions
+    ):
 
         raise HTTPException(
             status_code=400,
-            detail="Unsupported file type"
+            detail=(
+                "Unsupported file type"
+            ),
         )
 
-    content = await file.read()
+
+    content = (
+        await file.read()
+    )
+
 
     if not content:
 
         raise HTTPException(
             status_code=400,
-            detail="Uploaded file is empty"
+            detail=(
+                "Uploaded file is empty"
+            ),
         )
 
-    
+
+    # =====================================================
+    # SAVE FILE LOCALLY
+    # =====================================================
 
     unique_name = (
-        f"{uuid.uuid4()}{extension}"
+        f"{uuid.uuid4()}"
+        f"{extension}"
     )
 
+
     file_path = (
-        UPLOAD_DIR / unique_name
+        UPLOAD_DIR /
+        unique_name
     )
+
 
     with open(
         file_path,
-        "wb"
+        "wb",
     ) as buffer:
 
-        buffer.write(content)
+        buffer.write(
+            content
+        )
 
-   #document id
+
+    # =====================================================
+    # DOCUMENT ID
+    # =====================================================
 
     document_id = str(
         uuid.uuid4()
     )
 
+
     now = datetime.now(
         timezone.utc
     )
-     #mongodb
+
+
+    # =====================================================
+    # SAVE MONGODB METADATA
+    # =====================================================
 
     document = {
 
         "document_id":
             document_id,
 
-        # VERY IMPORTANT
-        # Store SHARED AGENT ID here
+
+        # Shared workspace identifier.
         "agent_id":
             agent_id,
 
-        # User who uploaded it
+
+        # Audit only:
+        # does NOT control visibility.
         "uploaded_by":
             user_id,
+
 
         "name":
             file.filename,
 
+
         "stored_name":
             unique_name,
+
 
         "type":
             extension.replace(
                 ".",
-                ""
+                "",
             ).upper(),
+
 
         "size":
             len(content),
 
+
         "status":
             "Processing",
+
 
         "progress":
             0,
 
+
         "chunks":
             0,
+
 
         "uploaded_at":
             now,
 
+
         "file_path":
-            str(file_path)
+            str(
+                file_path
+            ),
     }
 
-    result = documents_collection.insert_one(
-        document
-    )
 
-   #document process
+    try:
+
+        result = (
+            documents_collection.insert_one(
+                document
+            )
+        )
+
+    except Exception as error:
+
+        print(
+            "DOCUMENT DATABASE ERROR:",
+            repr(error),
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Failed to save document metadata"
+            ),
+        )
+
+
+    # =====================================================
+    # DOCUMENT PROCESSING
+    # =====================================================
 
     try:
 
         print(
-            f"Parsing document: {file.filename}"
+            f"Parsing document: "
+            f"{file.filename}",
+            flush=True,
         )
+
 
         text = parse_document(
-            str(file_path)
+            str(
+                file_path
+            )
         )
 
-        if not text or not text.strip():
+
+        if (
+            not text
+            or
+            not text.strip()
+        ):
 
             documents_collection.update_one(
-
                 {
                     "_id":
                         result.inserted_id
                 },
-
                 {
                     "$set": {
-
                         "status":
                             "Failed",
 
                         "progress":
-                            0
+                            0,
                     }
-                }
+                },
             )
+
 
             raise HTTPException(
                 status_code=400,
                 detail=(
                     "Could not extract "
                     "text from document"
-                )
+                ),
             )
 
-        #chunk document
+
+        # =================================================
+        # CHUNK DOCUMENT
+        # =================================================
 
         print(
-            "Creating text chunks..."
+            "Creating text chunks...",
+            flush=True,
         )
+
 
         chunks = chunk_text(
             text
         )
 
+
         if not chunks:
 
             documents_collection.update_one(
-
                 {
                     "_id":
                         result.inserted_id
                 },
-
                 {
                     "$set": {
-
                         "status":
                             "Failed",
 
                         "progress":
-                            0
+                            0,
                     }
-                }
+                },
             )
+
 
             raise HTTPException(
                 status_code=400,
                 detail=(
                     "No text chunks "
                     "were created"
-                )
+                ),
             )
+
 
         total_chunks = len(
             chunks
         )
 
+
         print(
-            f"Created {total_chunks} chunks"
+            f"Created "
+            f"{total_chunks} "
+            f"chunks",
+            flush=True,
         )
 
-        #qdrant collection
+
+        # =================================================
+        # QDRANT COLLECTION
+        # =================================================
 
         create_collection()
 
-       #store chunks
 
-        for index, chunk in enumerate(
+        # =================================================
+        # STORE DOCUMENT CHUNKS
+        # =================================================
+
+        for (
+            index,
+            chunk,
+        ) in enumerate(
             chunks
         ):
 
+
             store_chunk(
+                text=
+                    chunk,
 
-                text=chunk,
+                agent_id=
+                    agent_id,
 
-                
-                agent_id=agent_id,
+                document_id=
+                    document_id,
 
-                document_id=document_id,
+                filename=
+                    file.filename,
 
-                filename=file.filename,
-
-                chunk_index=index
+                chunk_index=
+                    index,
             )
+
 
             progress = int(
                 (
                     (index + 1)
-                    / total_chunks
+                    /
+                    total_chunks
                 )
                 * 100
             )
 
-            documents_collection.update_one(
 
+            documents_collection.update_one(
                 {
                     "_id":
                         result.inserted_id
                 },
-
                 {
                     "$set": {
-
                         "progress":
                             progress
                     }
-                }
+                },
             )
+
 
             print(
                 f"Indexed chunk "
                 f"{index + 1}/"
-                f"{total_chunks}"
+                f"{total_chunks}",
+                flush=True,
             )
 
-       #as indexed
+
+        # =================================================
+        # MARK DOCUMENT INDEXED
+        # =================================================
 
         documents_collection.update_one(
-
             {
                 "_id":
                     result.inserted_id
             },
-
             {
                 "$set": {
 
@@ -486,34 +681,39 @@ async def upload_document(
                         100,
 
                     "chunks":
-                        total_chunks
+                        total_chunks,
                 }
-            }
+            },
         )
 
+
         print(
-            f"Document indexed successfully: "
-            f"{file.filename}"
+            f"Document indexed "
+            f"successfully: "
+            f"{file.filename}",
+            flush=True,
         )
+
 
     except HTTPException:
 
         raise
 
-    except Exception as e:
+
+    except Exception as error:
 
         print(
-            "Document processing error:",
-            repr(e)
+            "DOCUMENT PROCESSING ERROR:",
+            repr(error),
+            flush=True,
         )
 
-        documents_collection.update_one(
 
+        documents_collection.update_one(
             {
                 "_id":
                     result.inserted_id
             },
-
             {
                 "$set": {
 
@@ -521,31 +721,32 @@ async def upload_document(
                         "Failed",
 
                     "progress":
-                        0
+                        0,
                 }
-            }
+            },
         )
-        print(
-        "DOCUMENT INDEXING ERROR:",
-        repr(e),
-        flush=True,
-        )
+
 
         raise HTTPException(
             status_code=500,
             detail=(
-            "Document uploaded but indexing failed"
+                "Document uploaded "
+                "but indexing failed"
             ),
         )
-        
 
-   #response
+
+    # =====================================================
+    # RESPONSE
+    # =====================================================
 
     return {
 
         "message":
-            "Document uploaded and "
-            "indexed successfully",
+            (
+                "Document uploaded and "
+                "indexed successfully"
+            ),
 
         "document": {
 
@@ -569,7 +770,7 @@ async def upload_document(
             "type":
                 extension.replace(
                     ".",
-                    ""
+                    "",
                 ).upper(),
 
             "size":
@@ -582,6 +783,6 @@ async def upload_document(
                 100,
 
             "chunks":
-                total_chunks
-        }
+                total_chunks,
+        },
     }

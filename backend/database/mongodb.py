@@ -32,11 +32,15 @@ client = MongoClient(
 
     tlsCAFile=certifi.where(),
 
-    serverSelectionTimeoutMS=30000,
+    serverSelectionTimeoutMS=60000,
 
-    connectTimeoutMS=30000,
+    connectTimeoutMS=60000,
 
-    socketTimeoutMS=30000,
+    socketTimeoutMS=120000,
+    retryWrites=True,
+    retryReads=True,
+
+    maxPoolSize=50,
 )
 
 
@@ -60,3 +64,23 @@ documents_collection = db[
 chat_collection = db[
     "chat_messages"
 ]
+
+repositories_collection = db[
+    "repositories"
+]
+
+try:
+    repositories_collection.create_index(
+        "repository_id",
+        unique=True,
+    )
+
+    print(
+        "Repository index created successfully."
+    )
+
+except Exception as error:
+    print(
+        "REPOSITORY INDEX WARNING:",
+        repr(error),
+    )

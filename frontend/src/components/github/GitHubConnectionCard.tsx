@@ -1,48 +1,202 @@
 "use client";
 
-import { useState } from "react";
 import {
-  FolderGit2,
+  FormEvent,
+  useState,
+} from "react";
+
+import {
+  Code2,
+  GitBranch,
   Link2,
-  KeyRound,
-  Loader2,
-  CheckCircle2,
 } from "lucide-react";
 
-export default function GitHubConnectionCard() {
-  const [repositoryUrl, setRepositoryUrl] = useState("");
-  const [token, setToken] = useState("");
-  const [loading, setLoading] = useState(false);
+import {
+  connectRepository,
+} from "@/services/github";
 
-  const handleConnect = async () => {
-    setLoading(true);
 
-    // Backend API will be connected later
-    setTimeout(() => {
-      setLoading(false);
-      alert("Repository Connected Successfully!");
-    }, 2000);
-  };
+interface GitHubConnectionCardProps {
+  agentId: string;
+
+  onConnected:
+    () => Promise<void>
+    | void;
+}
+
+
+export default function GitHubConnectionCard({
+  agentId,
+  onConnected,
+}: GitHubConnectionCardProps) {
+
+  const [
+    repoUrl,
+    setRepoUrl,
+  ] = useState("");
+
+
+  const [
+    branch,
+    setBranch,
+  ] = useState(
+    "main"
+  );
+
+
+  const [
+    githubToken,
+    setGithubToken,
+  ] = useState("");
+
+
+  const [
+    connecting,
+    setConnecting,
+  ] = useState(false);
+
+
+  const [
+    error,
+    setError,
+  ] = useState("");
+
+
+  const [
+    success,
+    setSuccess,
+  ] = useState("");
+
+
+  // =========================================================
+  // CONNECT
+  // =========================================================
+
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>
+  ) {
+
+    event.preventDefault();
+
+
+    setError("");
+    setSuccess("");
+
+
+    if (!agentId) {
+
+      setError(
+        "Please select an agent first."
+      );
+
+      return;
+    }
+
+
+    if (!repoUrl.trim()) {
+
+      setError(
+        "GitHub repository URL is required."
+      );
+
+      return;
+    }
+
+
+    if (!branch.trim()) {
+
+      setError(
+        "Branch name is required."
+      );
+
+      return;
+    }
+
+
+    try {
+
+      setConnecting(true);
+
+
+      const response =
+        await connectRepository({
+
+          agent_id:
+            agentId,
+
+          repo_url:
+            repoUrl.trim(),
+
+          branch:
+            branch.trim(),
+
+          github_token:
+            githubToken.trim()
+              ? githubToken.trim()
+              : null,
+
+        });
+
+
+      setSuccess(
+        response.message ||
+          "Repository connected successfully."
+      );
+
+
+      setRepoUrl("");
+      setGithubToken("");
+
+
+      await onConnected();
+
+
+    } catch (err: any) {
+
+      console.error(
+        "CONNECT REPOSITORY ERROR:",
+        err
+      );
+
+
+      setError(
+        err.message ||
+          "Failed to connect repository."
+      );
+
+
+    } finally {
+
+      setConnecting(false);
+
+    }
+  }
+
 
   return (
-    <div className="rounded-3xl border bg-white p-8 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
 
-     
+      <div className="flex items-start gap-4">
 
-      <div className="flex items-center gap-4">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 text-white">
 
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100">
-          <FolderGit2 className="h-7 w-7 text-blue-600" />
+          <Code2
+            size={24}
+          />
+
         </div>
+
 
         <div>
 
-          <h2 className="text-2xl font-bold text-slate-900">
+          <h2 className="text-xl font-semibold text-slate-900">
             Connect GitHub Repository
           </h2>
 
-          <p className="text-slate-500">
-            Connect a GitHub repository so the AI can analyze your codebase.
+
+          <p className="mt-1 text-sm text-slate-500">
+            Connect a public repository or provide
+            a GitHub token for a private repository.
           </p>
 
         </div>
@@ -50,96 +204,169 @@ export default function GitHubConnectionCard() {
       </div>
 
 
-      <div className="mt-8">
+      <form
+        onSubmit={
+          handleSubmit
+        }
+        className="mt-6 space-y-5"
+      >
 
-        <label className="font-medium text-slate-700">
-          Repository URL
-        </label>
 
-        <div className="mt-2 flex items-center rounded-xl border px-4">
+        {/* REPOSITORY URL */}
 
-          <Link2 className="text-slate-400" size={20} />
+        <div>
 
-          <input
-            type="text"
-            value={repositoryUrl}
-            onChange={(e) => setRepositoryUrl(e.target.value)}
-            placeholder="https://github.com/username/repository"
-            className="w-full bg-transparent px-3 py-4 outline-none"
-          />
+          <label className="text-sm font-medium text-slate-700">
+            Repository URL
+          </label>
+
+
+          <div className="mt-2 flex items-center rounded-xl border border-slate-300 bg-white px-4">
+
+            <Link2
+              size={18}
+              className="text-slate-400"
+            />
+
+
+            <input
+              type="text"
+              value={
+                repoUrl
+              }
+              onChange={(e) =>
+                setRepoUrl(
+                  e.target.value
+                )
+              }
+              placeholder="https://github.com/owner/repository.git"
+              className="w-full bg-transparent px-3 py-3 outline-none"
+            />
+
+          </div>
 
         </div>
 
-      </div>
 
-     
+        {/* BRANCH */}
 
-      <div className="mt-6">
+        <div>
 
-        <label className="font-medium text-slate-700">
-          GitHub Personal Access Token
-          <span className="ml-2 text-sm text-slate-400">
-            (Optional)
-          </span>
-        </label>
+          <label className="text-sm font-medium text-slate-700">
+            Branch
+          </label>
 
-        <div className="mt-2 flex items-center rounded-xl border px-4">
 
-          <KeyRound className="text-slate-400" size={20} />
+          <div className="mt-2 flex items-center rounded-xl border border-slate-300 bg-white px-4">
+
+            <GitBranch
+              size={18}
+              className="text-slate-400"
+            />
+
+
+            <input
+              type="text"
+              value={
+                branch
+              }
+              onChange={(e) =>
+                setBranch(
+                  e.target.value
+                )
+              }
+              placeholder="main"
+              className="w-full bg-transparent px-3 py-3 outline-none"
+            />
+
+          </div>
+
+        </div>
+
+
+        {/* TOKEN */}
+
+        <div>
+
+          <label className="text-sm font-medium text-slate-700">
+            GitHub Token
+            <span className="ml-2 font-normal text-slate-400">
+              Optional
+            </span>
+          </label>
+
 
           <input
             type="password"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="ghp_xxxxxxxxxxxxxxxxx"
-            className="w-full bg-transparent px-3 py-4 outline-none"
+            value={
+              githubToken
+            }
+            onChange={(e) =>
+              setGithubToken(
+                e.target.value
+              )
+            }
+            placeholder="Required only for private repositories"
+            autoComplete="off"
+            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-blue-500"
           />
+
+
+          <p className="mt-2 text-xs text-slate-400">
+            Do not enter a token for public repositories.
+          </p>
 
         </div>
 
-      </div>
 
-     
+        {/* ERRORS */}
 
-      <div className="mt-8 rounded-2xl bg-slate-50 p-5">
+        {error && (
 
-        <h3 className="font-semibold text-slate-900">
-          Before Connecting
-        </h3>
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </div>
 
-        <ul className="mt-4 space-y-3 text-sm text-slate-600">
-
-          <li>✓ Repository must exist.</li>
-
-          <li>✓ You must have repository access.</li>
-
-          <li>✓ Public repositories don't require a token.</li>
-
-          <li>✓ Private repositories require a Personal Access Token.</li>
-
-        </ul>
-
-      </div>
-
-      
-
-      <button
-        onClick={handleConnect}
-        disabled={loading}
-        className="mt-8 flex w-full items-center justify-center gap-3 rounded-xl bg-blue-600 py-4 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400"
-      >
-        {loading ? (
-          <>
-            <Loader2 className="h-5 w-5 animate-spin" />
-            Connecting...
-          </>
-        ) : (
-          <>
-            <CheckCircle2 className="h-5 w-5" />
-            Connect Repository
-          </>
         )}
-      </button>
+
+
+        {success && (
+
+          <div className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">
+            {success}
+          </div>
+
+        )}
+
+
+        {/* BUTTON */}
+
+        <button
+          type="submit"
+          disabled={
+            connecting ||
+            !agentId
+          }
+          className="w-full rounded-xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+
+          {connecting
+            ? "Cloning & Indexing Repository..."
+            : "Connect Repository"}
+
+        </button>
+
+
+        {connecting && (
+
+          <p className="text-center text-xs text-slate-500">
+            Large repositories may take some time to clone,
+            chunk, embed and index.
+          </p>
+
+        )}
+
+      </form>
 
     </div>
   );

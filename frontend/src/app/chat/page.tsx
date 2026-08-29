@@ -9,100 +9,50 @@ import {
 } from "react";
 
 import {
+  useRouter,
   useSearchParams,
 } from "next/navigation";
 
 import {
-  ChatSource,
   clearChatHistory,
   getChatHistory,
   sendChatMessage,
-} from "@/services/chat";
+  type ChatSource,
+} from "@/lib/chat";
 
 import {
-  DocumentItem,
   getDocuments,
+  type DocumentItem,
 } from "@/lib/documents";
 
-interface Message {
+
+
+type Message = {
   id: string;
   role: "user" | "assistant";
   content: string;
   sources?: ChatSource[];
-}
+};
 
-function normalizeHistoryResponse(
-  response: unknown
-): Message[] {
-  const data = response as any;
 
-  const rawMessages = Array.isArray(response)
-    ? response
-    : Array.isArray(data?.messages)
-      ? data.messages
-      : Array.isArray(data?.history)
-        ? data.history
-        : Array.isArray(data?.chats)
-          ? data.chats
-          : [];
+function ChatContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  return rawMessages.map(
-    (message: any, index: number) => ({
-      id:
-        message?.id ||
-        message?.message_id ||
-        `history-${index}-${Date.now()}`,
-      role:
-        message?.role === "user"
-          ? "user"
-          : "assistant",
-      content:
-        message?.content ||
-        message?.message ||
-        "",
-      sources: Array.isArray(message?.sources)
-        ? message.sources
-        : [],
-    })
-  );
-}
-
-function ChatPageContent() {
-  const searchParams =
-    useSearchParams();
-
-  const messagesEndRef =
+  const bottomRef =
     useRef<HTMLDivElement | null>(
       null
     );
 
-  const [messages, setMessages] =
-    useState<Message[]>([]);
-
-  const [question, setQuestion] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(false);
+  const [
+    agentId,
+    setAgentId,
+  ] = useState("");
 
   const [
-    historyLoading,
-    setHistoryLoading,
-  ] = useState(false);
-
-  const [
-    clearing,
-    setClearing,
-  ] = useState(false);
-
-  const [error, setError] =
-    useState("");
-
-  const [success, setSuccess] =
-    useState("");
-
-  const [agentId, setAgentId] =
-    useState<string | null>(null);
+    repositoryId,
+    setRepositoryId,
+  ] = useState("");
 
   const [
     documents,
@@ -114,195 +64,393 @@ function ChatPageContent() {
     setSelectedDocumentId,
   ] = useState("");
 
-  function scrollToBottom() {
-    setTimeout(() => {
-      messagesEndRef.current
-        ?.scrollIntoView({
-          behavior: "smooth",
-        });
-    }, 100);
-  }
+  const [
+    messages,
+    setMessages,
+  ] = useState<Message[]>([]);
+
+  const [
+    question,
+    setQuestion,
+  ] = useState("");
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
+
+  const [
+    pageLoading,
+    setPageLoading,
+  ] = useState(true);
+
+  const [
+    error,
+    setError,
+  ] = useState("");
+
+  const [
+    success,
+    setSuccess,
+  ] = useState("");
+
+
+  const isRepositoryChat =
+    repositoryId.length > 0;
+
+
+  const indexedDocuments =
+    documents.filter(
+      (document) =>
+        document.status ===
+        "Indexed"
+    );
+
+
+  const selectedDocument =
+    indexedDocuments.find(
+      (document) =>
+        document.document_id ===
+        selectedDocumentId
+    );
+
+
+  const canChat =
+    Boolean(
+      agentId &&
+        (
+          repositoryId ||
+          selectedDocumentId
+        )
+    );
+
+
+  // =====================================================
+  // SCROLL
+  // =====================================================
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, loading]);
+    bottomRef.current
+      ?.scrollIntoView({
+        behavior: "smooth",
+      });
+  }, [
+    messages,
+    loading,
+  ]);
 
-  async function loadHistory(
-    currentAgentId: string,
-    documentId: string
-  ) {
-    if (!documentId) {
-      setMessages([]);
-      return;
-    }
 
-    try {
-      setHistoryLoading(true);
-      setError("");
-
-      const response =
-        await getChatHistory(
-          currentAgentId,
-          documentId
-        );
-
-      console.log(
-        "CHAT HISTORY RESPONSE:",
-        response
-      );
-
-      const restored =
-        normalizeHistoryResponse(
-          response
-        );
-
-      setMessages(restored);
-    } catch (error: any) {
-      console.error(
-        "LOAD HISTORY ERROR:",
-        error
-      );
-
-      setMessages([]);
-
-      setError(
-        error.message ||
-          "Failed to load chat history."
-      );
-    } finally {
-      setHistoryLoading(false);
-    }
-  }
+  // =====================================================
+  // INITIALIZE
+  // =====================================================
 
   useEffect(() => {
-    async function initializeChat() {
+    async function initialize() {
       try {
-        setHistoryLoading(true);
+        setPageLoading(true);
         setError("");
-        setSuccess("");
 
-        const storedAgentId =
+        const savedAgentId =
           localStorage.getItem(
             "selected_agent_id"
           );
 
-        if (!storedAgentId) {
-          setAgentId(null);
-          setDocuments([]);
-          setMessages([]);
-
+        if (!savedAgentId) {
           setError(
-            "Please select an agent before using chat."
+            "Please select an agent first."
           );
 
           return;
         }
 
         setAgentId(
-          storedAgentId
+          savedAgentId
         );
+
+
+        // -----------------------------------------------
+        // CHECK REPOSITORY
+        // -----------------------------------------------
+
+        const urlRepositoryId =
+          searchParams.get(
+            "repository_id"
+          );
+
+        const savedRepositoryId =
+          localStorage.getItem(
+            "selected_repository_id"
+          );
+
+        const currentRepositoryId =
+          urlRepositoryId ||
+          savedRepositoryId ||
+          "";
+
+
+        if (currentRepositoryId) {
+          setRepositoryId(
+            currentRepositoryId
+          );
+
+          localStorage.setItem(
+            "selected_repository_id",
+            currentRepositoryId
+          );
+
+          localStorage.removeItem(
+            "selected_document_id"
+          );
+
+          setSelectedDocumentId("");
+          setDocuments([]);
+          await loadHistory(
+            savedAgentId,
+            null,
+            currentRepositoryId
+          );
+          
+
+          return;
+        }
+
+
+        // -----------------------------------------------
+        // DOCUMENT MODE
+        // -----------------------------------------------
+
+        setRepositoryId("");
 
         const documentResponse =
           await getDocuments(
-            storedAgentId
+            savedAgentId
           );
 
-        const availableDocuments: DocumentItem[] =
-          Array.isArray(documentResponse)
-            ? documentResponse
-            : Array.isArray(
-                (documentResponse as any)?.documents
-              )
-              ? (documentResponse as any).documents
-              : [];
+
+        let availableDocuments:
+          DocumentItem[] = [];
+
+
+        if (
+          documentResponse &&
+          Array.isArray(
+            documentResponse.documents
+          )
+        ) {
+          availableDocuments =
+            documentResponse.documents;
+        }
+
 
         setDocuments(
           availableDocuments
         );
+
 
         const urlDocumentId =
           searchParams.get(
             "document_id"
           );
 
-        const storedDocumentId =
+        const savedDocumentId =
           localStorage.getItem(
             "selected_document_id"
           );
 
-        let initialDocumentId =
+        const documentId =
           urlDocumentId ||
-          storedDocumentId ||
+          savedDocumentId ||
           "";
 
-        if (initialDocumentId) {
-          const validDocument =
-            availableDocuments.some(
-              (document) =>
-                document.document_id ===
-                  initialDocumentId &&
-                document.status ===
-                  "Indexed"
-            );
 
-          if (!validDocument) {
-            initialDocumentId = "";
-
-            localStorage.removeItem(
-              "selected_document_id"
-            );
-          }
+        if (!documentId) {
+          return;
         }
+
+
+        const validDocument =
+          availableDocuments.find(
+            (document) =>
+              document.document_id ===
+                documentId &&
+              document.status ===
+                "Indexed"
+          );
+
+
+        if (!validDocument) {
+          localStorage.removeItem(
+            "selected_document_id"
+          );
+
+          return;
+        }
+
 
         setSelectedDocumentId(
-          initialDocumentId
+          documentId
         );
 
-        if (initialDocumentId) {
-          localStorage.setItem(
-            "selected_document_id",
-            initialDocumentId
-          );
+        localStorage.setItem(
+          "selected_document_id",
+          documentId
+        );
 
-          const historyResponse =
-            await getChatHistory(
-              storedAgentId,
-              initialDocumentId
-            );
 
-          console.log(
-            "INITIAL CHAT HISTORY RESPONSE:",
-            historyResponse
-          );
+        await loadHistory(
+          savedAgentId,
+          documentId,
+          null
+        );
 
-          const restoredMessages =
-            normalizeHistoryResponse(
-              historyResponse
-            );
-
-          setMessages(
-            restoredMessages
-          );
-        } else {
-          setMessages([]);
-        }
-      } catch (error: any) {
+      } catch (err: unknown) {
         console.error(
-          "INITIALIZE CHAT ERROR:",
-          error
+          "CHAT INITIALIZATION ERROR:",
+          err
         );
 
         setError(
-          error.message ||
+          getErrorMessage(
+            err,
             "Failed to initialize chat."
+          )
         );
+
       } finally {
-        setHistoryLoading(false);
+        setPageLoading(false);
       }
     }
 
-    initializeChat();
-  }, [searchParams]);
+
+    initialize();
+
+  }, [
+    searchParams,
+  ]);
+
+
+  // =====================================================
+  // LOAD DOCUMENT HISTORY
+  // =====================================================
+
+  async function loadHistory(
+    currentAgentId: string,
+    documentId: string | null = null,
+    currentRepositoryId: string | null = null
+  ) {
+    try {
+      setError("");
+      const response =
+        await getChatHistory(
+          currentAgentId,
+          documentId,
+          currentRepositoryId
+        );
+
+
+      const responseData =
+        response as unknown;
+
+
+      let rawMessages: any[] =
+        [];
+
+
+      if (
+        Array.isArray(
+          responseData
+        )
+      ) {
+        rawMessages =
+          responseData;
+
+      } else if (
+        responseData &&
+        typeof responseData ===
+          "object"
+      ) {
+        const objectData =
+          responseData as Record<
+            string,
+            unknown
+          >;
+
+
+        if (
+          Array.isArray(
+            objectData.messages
+          )
+        ) {
+          rawMessages =
+            objectData.messages;
+
+        } else if (
+          Array.isArray(
+            objectData.history
+          )
+        ) {
+          rawMessages =
+            objectData.history;
+        }
+      }
+
+
+      const restored:
+        Message[] =
+        rawMessages.map(
+          (
+            item: any,
+            index: number
+          ) => ({
+            id:
+              item.id ||
+              item.message_id ||
+              `history-${index}`,
+
+            role:
+              item.role === "user"
+                ? "user"
+                : "assistant",
+
+            content:
+              item.content ||
+              item.message ||
+              "",
+
+            sources:
+              Array.isArray(
+                item.sources
+              )
+                ? item.sources
+                : [],
+          })
+        );
+
+
+      setMessages(
+        restored
+      );
+
+    } catch (err: unknown) {
+      console.error(
+        "HISTORY ERROR:",
+        err
+      );
+
+      setMessages([]);
+      setError(
+        getErrorMessage(
+          err,
+          "failed to load chat history."
+        )
+      );
+    }
+  }
+
+
+  // =====================================================
+  // DOCUMENT CHANGE
+  // =====================================================
 
   async function handleDocumentChange(
     event:
@@ -311,14 +459,21 @@ function ChatPageContent() {
     const documentId =
       event.target.value;
 
-    setSelectedDocumentId(
-      documentId
-    );
-
     setMessages([]);
     setQuestion("");
     setError("");
     setSuccess("");
+
+    setSelectedDocumentId(
+      documentId
+    );
+
+    setRepositoryId("");
+
+    localStorage.removeItem(
+      "selected_repository_id"
+    );
+
 
     if (!documentId) {
       localStorage.removeItem(
@@ -328,24 +483,26 @@ function ChatPageContent() {
       return;
     }
 
+
     localStorage.setItem(
       "selected_document_id",
       documentId
     );
 
-    if (!agentId) {
-      setError(
-        "Please select an agent first."
+
+    if (agentId) {
+      await loadHistory(
+        agentId,
+        documentId,
+        null
       );
-
-      return;
     }
-
-    await loadHistory(
-      agentId,
-      documentId
-    );
   }
+
+
+  // =====================================================
+  // SEND
+  // =====================================================
 
   async function handleSubmit(
     event:
@@ -353,12 +510,14 @@ function ChatPageContent() {
   ) {
     event.preventDefault();
 
-    const trimmedQuestion =
+    const cleanQuestion =
       question.trim();
 
-    if (!trimmedQuestion) {
+
+    if (!cleanQuestion) {
       return;
     }
+
 
     if (!agentId) {
       setError(
@@ -368,19 +527,31 @@ function ChatPageContent() {
       return;
     }
 
-    if (!selectedDocumentId) {
+
+    if (
+      !selectedDocumentId &&
+      !repositoryId
+    ) {
       setError(
-        "Please select a document first."
+        "Please select a document or repository first."
       );
 
       return;
     }
 
-    const userMessage: Message = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: trimmedQuestion,
+
+    const userMessage:
+      Message = {
+      id:
+        `user-${Date.now()}`,
+
+      role:
+        "user",
+
+      content:
+        cleanQuestion,
     };
+
 
     setMessages(
       (previous) => [
@@ -394,22 +565,43 @@ function ChatPageContent() {
     setSuccess("");
     setLoading(true);
 
+
     try {
       const response =
         await sendChatMessage(
-          trimmedQuestion,
+          cleanQuestion,
           agentId,
-          selectedDocumentId
+
+          isRepositoryChat
+            ? null
+            : selectedDocumentId,
+
+          isRepositoryChat
+            ? repositoryId
+            : null
         );
+
 
       const assistantMessage:
         Message = {
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        content: response.answer,
+        id:
+          `assistant-${Date.now()}`,
+
+        role:
+          "assistant",
+
+        content:
+          response.answer ||
+          "No answer returned.",
+
         sources:
-          response.sources || [],
+          Array.isArray(
+            response.sources
+          )
+            ? response.sources
+            : [],
       };
+
 
       setMessages(
         (previous) => [
@@ -417,140 +609,209 @@ function ChatPageContent() {
           assistantMessage,
         ]
       );
-    } catch (error: any) {
+
+    } catch (err: unknown) {
       console.error(
         "CHAT ERROR:",
-        error
+        err
       );
 
       setError(
-        error.message ||
+        getErrorMessage(
+          err,
           "Failed to get AI response."
+        )
       );
+
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleClearChat() {
-    if (
-      !agentId ||
-      !selectedDocumentId
-    ) {
-      return;
-    }
 
-    const confirmed =
-      window.confirm(
-        "Clear all chat history for this document?"
-      );
+  // =====================================================
+  // CLEAR CHAT
+  // =====================================================
 
-    if (!confirmed) {
-      return;
-    }
+ // =====================================================
+// CLEAR CHAT
+// =====================================================
 
-    try {
-      setClearing(true);
-      setError("");
-      setSuccess("");
+async function handleClearChat() {
+  setError("");
+  setSuccess("");
 
+  if (!agentId) {
+    setError(
+      "Please select an agent first."
+    );
+
+    return;
+  }
+
+  if (
+    !selectedDocumentId &&
+    !repositoryId
+  ) {
+    setError(
+      "Please select a document or repository first."
+    );
+
+    return;
+  }
+
+  const confirmed =
+    window.confirm(
+      isRepositoryChat
+        ? "Clear chat history for this repository?"
+        : "Clear chat history for this document?"
+    );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    // ===============================================
+    // REPOSITORY CHAT
+    // ===============================================
+
+    if (isRepositoryChat) {
       await clearChatHistory(
         agentId,
-        selectedDocumentId
+        null,
+        repositoryId
       );
 
       setMessages([]);
 
       setSuccess(
-        "Chat history cleared successfully."
-      );
-    } catch (error: any) {
-      console.error(
-        "CLEAR CHAT ERROR:",
-        error
+        "Repository chat history cleared."
       );
 
-      setError(
-        error.message ||
-          "Failed to clear chat history."
-      );
-    } finally {
-      setClearing(false);
+      return;
     }
+
+    // ===============================================
+    // DOCUMENT CHAT
+    // ===============================================
+
+    await clearChatHistory(
+      agentId,
+      selectedDocumentId,
+      null
+    );
+
+    setMessages([]);
+
+    setSuccess(
+      "Document chat history cleared."
+    );
+
+  } catch (err: unknown) {
+    console.error(
+      "CLEAR CHAT ERROR:",
+      err
+    );
+
+    setError(
+      getErrorMessage(
+        err,
+        "Failed to clear chat."
+      )
+    );
+  }
+}
+
+
+  // =====================================================
+  // LOADING SCREEN
+  // =====================================================
+
+  if (pageLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+        <div className="text-center">
+
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
+
+          <p className="mt-4 text-slate-500">
+            Loading chat...
+          </p>
+
+        </div>
+      </div>
+    );
   }
 
-  const selectedDocument =
-    documents.find(
-      (document) =>
-        document.document_id ===
-        selectedDocumentId
-    );
 
-  const indexedDocuments =
-    documents.filter(
-      (document) =>
-        document.status ===
-        "Indexed"
-    );
-
-    
+  // =====================================================
+  // RENDER
+  // =====================================================
 
   return (
     <div className="min-h-screen bg-slate-50 p-6">
 
       <div className="mx-auto flex min-h-[85vh] max-w-5xl flex-col overflow-hidden rounded-2xl border bg-white shadow-sm">
 
-        <div className="border-b bg-white p-6">
 
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+        {/* HEADER */}
+
+        <div className="border-b p-6">
+
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
 
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">
+
+              <h1 className="text-2xl font-bold">
                 Enterprise AI Chat
               </h1>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Select an indexed document and ask questions about it.
+
+              <p className="mt-2 text-sm text-slate-500">
+                {isRepositoryChat
+                  ? "Ask questions about the selected GitHub repository."
+                  : "Ask questions about an indexed document."}
               </p>
+
 
               {agentId && (
                 <p className="mt-2 text-xs text-slate-400">
-                  Active Agent: {agentId}
+                  Active Agent:{" "}
+                  {agentId}
                 </p>
               )}
+
             </div>
 
-            <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
 
-              <div className="w-full sm:w-80">
+            {/* DOCUMENT SELECTOR */}
 
-                <label
-                  htmlFor="document-select"
-                  className="mb-2 block text-sm font-medium text-slate-700"
-                >
-                  Select Document
-                </label>
+            {!isRepositoryChat && (
+
+              <div className="flex gap-3">
 
                 <select
-                  id="document-select"
-                  value={selectedDocumentId}
+                  value={
+                    selectedDocumentId
+                  }
                   onChange={
                     handleDocumentChange
                   }
                   disabled={
-                    historyLoading ||
-                    loading ||
-                    clearing ||
-                    !agentId
+                    loading
                   }
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100"
+                  className="min-w-72 rounded-xl border px-4 py-3"
                 >
+
                   <option value="">
                     Select document...
                   </option>
 
+
                   {indexedDocuments.map(
                     (document) => (
+
                       <option
                         key={
                           document.document_id
@@ -561,12 +822,12 @@ function ChatPageContent() {
                       >
                         {document.name}
                       </option>
+
                     )
                   )}
-                </select>
-              </div>
 
-              <div className="flex items-end">
+                </select>
+
 
                 <button
                   type="button"
@@ -574,315 +835,351 @@ function ChatPageContent() {
                     handleClearChat
                   }
                   disabled={
-                    !selectedDocumentId ||
-                    loading ||
-                    historyLoading ||
-                    clearing
+                    !selectedDocumentId
                   }
-                  className="w-full rounded-xl border border-red-200 px-5 py-3 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+                  className="rounded-xl border border-red-200 px-4 py-3 text-red-600 disabled:opacity-40"
                 >
-                  {clearing
-                    ? "Clearing..."
-                    : "Clear Chat"}
+                  Clear Chat
                 </button>
+
               </div>
 
-            </div>
+            )}
+
+
+            {/* REPOSITORY CONTROLS */}
+
+            {isRepositoryChat && (
+
+              <div className="flex gap-3">
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(
+                      "/github"
+                    )
+                  }
+                  className="rounded-xl border px-4 py-3"
+                >
+                  ← GitHub Agent
+                </button>
+
+
+                <button
+                  type="button"
+                  onClick={
+                    handleClearChat
+                  }
+                  className="rounded-xl border border-red-200 px-4 py-3 text-red-600"
+                >
+                  Clear Chat
+                </button>
+
+              </div>
+
+            )}
 
           </div>
 
-          {selectedDocument && (
-            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
 
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-blue-500">
-                  Currently chatting with
+          {/* REPOSITORY BANNER */}
+
+          {isRepositoryChat && (
+
+            <div className="mt-5 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+
+              <p className="text-xs font-semibold uppercase text-indigo-500">
+                GitHub Repository Chat
+              </p>
+
+
+              <p className="mt-1 font-semibold text-indigo-900">
+                Repository Indexed
+              </p>
+
+
+              <p className="mt-1 break-all text-xs text-indigo-600">
+                {repositoryId}
+              </p>
+
+            </div>
+
+          )}
+
+
+          {/* DOCUMENT BANNER */}
+
+          {!isRepositoryChat &&
+            selectedDocument && (
+
+              <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 p-4">
+
+                <p className="text-xs font-semibold uppercase text-blue-500">
+                  Current Document
                 </p>
 
                 <p className="mt-1 font-semibold text-blue-900">
                   {selectedDocument.name}
                 </p>
-              </div>
-
-              <div className="flex items-center gap-3">
-
-                <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700">
-                  Indexed
-                </span>
-
-                <span className="text-xs text-blue-600">
-                  {selectedDocument.chunks} chunks
-                </span>
 
               </div>
 
-            </div>
-          )}
+            )}
 
         </div>
 
+
+        {/* ERROR */}
+
         {error && (
-          <div className="mx-6 mt-5 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
+
+          <div className="mx-6 mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
             {error}
           </div>
+
         )}
 
+
+        {/* SUCCESS */}
+
         {success && (
-          <div className="mx-6 mt-5 rounded-xl border border-green-100 bg-green-50 p-4 text-sm text-green-700">
+
+          <div className="mx-6 mt-5 rounded-xl border border-green-200 bg-green-50 p-4 text-green-700">
             {success}
           </div>
+
         )}
+
+
+        {/* CHAT AREA */}
 
         <div className="flex-1 space-y-5 overflow-y-auto p-6">
 
-          {historyLoading && (
-            <div className="flex min-h-80 items-center justify-center">
 
-              <div className="text-center">
+          {messages.length === 0 &&
+            !loading && (
 
-                <div className="mx-auto h-7 w-7 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
-
-                <p className="mt-3 text-sm text-slate-500">
-                  Loading conversation...
-                </p>
-
-              </div>
-
-            </div>
-          )}
-
-          {!historyLoading &&
-            messages.length === 0 && (
               <div className="flex min-h-80 items-center justify-center">
 
-                <div className="max-w-lg text-center">
+                <div className="text-center">
 
-                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-100 text-2xl">
-                    💬
+                  <div className="text-4xl">
+                    {isRepositoryChat
+                      ? "💻"
+                      : "💬"}
                   </div>
 
-                  <h2 className="mt-5 text-xl font-semibold text-slate-800">
-                    {selectedDocument
-                      ? "Ask your document"
-                      : "Select a document"}
+
+                  <h2 className="mt-4 text-xl font-semibold">
+                    {isRepositoryChat
+                      ? "Repository ready"
+                      : selectedDocument
+                        ? "Document ready"
+                        : "Select a document"}
                   </h2>
 
-                  {selectedDocument ? (
-                    <>
-                      <p className="mt-2 text-sm text-slate-500">
-                        You are chatting with{" "}
-                        <span className="font-medium text-slate-700">
-                          {selectedDocument.name}
-                        </span>
-                      </p>
 
-                      <p className="mt-3 text-sm text-slate-400">
-                        Example: What are the main technical skills mentioned in this document?
-                      </p>
-                    </>
-                  ) : (
-                    <p className="mt-2 text-sm text-slate-500">
-                      Choose an indexed document above to start chatting.
-                    </p>
-                  )}
+                  <p className="mt-2 text-sm text-slate-500">
+                    {isRepositoryChat
+                      ? "Ask anything about this codebase."
+                      : selectedDocument
+                        ? "Ask anything about this document."
+                        : "Select an indexed document first."}
+                  </p>
 
                 </div>
 
               </div>
+
             )}
 
-          {!historyLoading &&
-            messages.map(
-              (message) => (
+
+          {messages.map(
+            (message) => (
+
+              <div
+                key={
+                  message.id
+                }
+                className={
+                  message.role === "user"
+                    ? "flex justify-end"
+                    : "flex justify-start"
+                }
+              >
+
                 <div
-                  key={message.id}
                   className={
-                    message.role ===
-                    "user"
-                      ? "flex justify-end"
-                      : "flex justify-start"
+                    message.role === "user"
+                      ? "max-w-[80%] rounded-2xl bg-blue-600 px-5 py-4 text-white"
+                      : "max-w-[85%] rounded-2xl border bg-slate-50 px-5 py-4"
                   }
                 >
-                  <div
-                    className={
-                      message.role ===
-                      "user"
-                        ? "max-w-[80%] rounded-2xl rounded-br-md bg-blue-600 px-5 py-4 text-white shadow-sm"
-                        : "max-w-[85%] rounded-2xl rounded-bl-md border border-slate-200 bg-slate-50 px-5 py-4 text-slate-800"
-                    }
-                  >
-                    <p
-                      className={
-                        message.role ===
-                        "user"
-                          ? "mb-2 text-xs font-semibold text-blue-100"
-                          : "mb-2 text-xs font-semibold text-slate-500"
-                      }
-                    >
-                      {message.role ===
-                      "user"
-                        ? "You"
-                        : "Enterprise AI"}
-                    </p>
 
-                    <p className="whitespace-pre-wrap leading-relaxed">
-                      {message.content}
-                    </p>
+                  <p className="mb-2 text-xs font-semibold opacity-70">
+                    {message.role === "user"
+                      ? "You"
+                      : "Enterprise AI"}
+                  </p>
 
-                    {message.role ===
-                      "assistant" &&
-                      message.sources &&
-                      message.sources.length >
-                        0 && (
-                        <div className="mt-5 border-t border-slate-200 pt-4">
 
-                          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                            Sources
-                          </p>
+                  <p className="whitespace-pre-wrap">
+                    {message.content}
+                  </p>
 
-                          <div className="mt-3 space-y-2">
 
-                            {message.sources.map(
-                              (
-                                source,
-                                index
-                              ) => (
+                  {message.sources &&
+                    message.sources.length >
+                      0 && (
+
+                      <div className="mt-4 border-t pt-4">
+
+                        <p className="text-xs font-semibold uppercase text-slate-500">
+                          Sources
+                        </p>
+
+
+                        <div className="mt-2 space-y-2">
+
+                          {message.sources.map(
+                            (
+                              source,
+                              index
+                            ) => (
+
+                              <div
+                                key={
+                                  `source-${index}`
+                                }
+                                className="rounded-lg border bg-white p-3 text-xs"
+                              >
+
                                 <div
-                                  key={`${source.document_id}-${source.chunk_index}-${index}`}
-                                  className="rounded-xl border border-slate-200 bg-white p-3 text-xs"
-                                >
-                                  <p className="font-semibold text-slate-700">
-                                    {source.filename ||
-                                      "Document"}
-                                  </p>
+  key={`source-${index}`}
+  className="rounded-lg border bg-white p-3 text-xs"
+>
+  <p className="break-all font-semibold text-slate-800">
+    {source.file_path ||
+      source.filename ||
+      "Source"}
+  </p>
 
-                                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-slate-500">
+  <div className="mt-2 flex flex-wrap gap-2 text-slate-500">
 
-                                    {source.chunk_index !==
-                                      undefined && (
-                                      <span>
-                                        Chunk{" "}
-                                        {source.chunk_index +
-                                          1}
-                                      </span>
-                                    )}
+    {source.language && (
+      <span className="rounded-md bg-slate-100 px-2 py-1">
+        {source.language}
+      </span>
+    )}
 
-                                    {source.score !==
-                                      undefined && (
-                                      <span>
-                                        Relevance:{" "}
-                                        {(
-                                          source.score *
-                                          100
-                                        ).toFixed(
-                                          1
-                                        )}
-                                        %
-                                      </span>
-                                    )}
+    {source.chunk_index !== undefined && (
+      <span className="rounded-md bg-slate-100 px-2 py-1">
+        Chunk {source.chunk_index}
+      </span>
+    )}
 
-                                  </div>
+    {source.source_type && (
+      <span className="rounded-md bg-slate-100 px-2 py-1">
+        {source.source_type}
+      </span>
+    )}
 
-                                </div>
-                              )
-                            )}
+  </div>
 
-                          </div>
+  {source.score !== undefined && (
+    <p className="mt-2 text-slate-500">
+      Relevance:{" "}
+      {(source.score * 100).toFixed(1)}
+      %
+    </p>
+  )}
+</div>
+
+                              </div>
+
+                            )
+                          )}
 
                         </div>
-                      )}
 
-                  </div>
+                      </div>
+
+                    )}
 
                 </div>
-              )
-            )}
+
+              </div>
+
+            )
+          )}
+
 
           {loading && (
+
             <div className="flex justify-start">
 
-              <div className="rounded-2xl rounded-bl-md border border-slate-200 bg-slate-50 px-5 py-4">
-
-                <p className="mb-2 text-xs font-semibold text-slate-500">
-                  Enterprise AI
-                </p>
-
-                <div className="flex items-center gap-2 text-sm text-slate-500">
-
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-slate-400" />
-
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-slate-400" />
-
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-slate-400" />
-
-                  <span className="ml-2">
-                    Searching document and generating answer...
-                  </span>
-
-                </div>
-
+              <div className="rounded-2xl border bg-slate-50 px-5 py-4 text-slate-500">
+                Searching knowledge and generating answer...
               </div>
 
             </div>
+
           )}
 
+
           <div
-            ref={messagesEndRef}
+            ref={
+              bottomRef
+            }
           />
 
         </div>
+
+
+        {/* INPUT */}
 
         <form
           onSubmit={
             handleSubmit
           }
-          className="border-t bg-white p-5"
+          className="border-t p-5"
         >
 
           <div className="flex gap-3">
 
             <input
-              type="text"
-              value={question}
-              onChange={(event) => {
+              value={
+                question
+              }
+              onChange={(event) =>
                 setQuestion(
                   event.target.value
-                );
-
-                if (error) {
-                  setError("");
-                }
-
-                if (success) {
-                  setSuccess("");
-                }
-              }}
-              placeholder={
-                selectedDocument
-                  ? `Ask about ${selectedDocument.name}...`
-                  : "Select a document first..."
+                )
               }
               disabled={
-                loading ||
-                historyLoading ||
-                clearing ||
-                !agentId ||
-                !selectedDocumentId
+                !canChat ||
+                loading
               }
-              className="flex-1 rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
+              placeholder={
+                isRepositoryChat
+                  ? "Ask about this repository..."
+                  : selectedDocument
+                    ? `Ask about ${selectedDocument.name}...`
+                    : "Select a document first..."
+              }
+              className="flex-1 rounded-xl border px-4 py-3 outline-none disabled:bg-slate-100"
             />
+
 
             <button
               type="submit"
               disabled={
+                !canChat ||
                 loading ||
-                historyLoading ||
-                clearing ||
-                !question.trim() ||
-                !agentId ||
-                !selectedDocumentId
+                !question.trim()
               }
-              className="rounded-xl bg-blue-600 px-7 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl bg-blue-600 px-7 py-3 font-semibold text-white disabled:opacity-50"
             >
               {loading
                 ? "Thinking..."
@@ -890,16 +1187,6 @@ function ChatPageContent() {
             </button>
 
           </div>
-
-          {selectedDocument && (
-            <p className="mt-2 text-xs text-slate-400">
-              Responses are restricted to{" "}
-              <span className="font-medium text-slate-600">
-                {selectedDocument.name}
-              </span>
-              .
-            </p>
-          )}
 
         </form>
 
@@ -909,28 +1196,39 @@ function ChatPageContent() {
   );
 }
 
+
+// =========================================================
+// ERROR HELPER
+// =========================================================
+
+function getErrorMessage(
+  error: unknown,
+  fallback: string
+): string {
+  if (
+    error instanceof Error
+  ) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
+
+// =========================================================
+// PAGE
+// =========================================================
+
 export default function ChatPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-50 p-6">
-          <div className="mx-auto flex min-h-[85vh] max-w-5xl items-center justify-center rounded-2xl border bg-white shadow-sm">
-            <div className="text-center">
-              <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
-
-              <h2 className="mt-5 text-lg font-semibold text-slate-800">
-                Loading Enterprise AI Chat
-              </h2>
-
-              <p className="mt-2 text-sm text-slate-500">
-                Preparing your documents and chat history...
-              </p>
-            </div>
-          </div>
+        <div className="flex min-h-screen items-center justify-center">
+          Loading chat...
         </div>
       }
     >
-      <ChatPageContent />
+      <ChatContent />
     </Suspense>
   );
 }

@@ -7,9 +7,17 @@ import api from "./axios";
 
 export interface ChatSource {
   filename?: string;
+  file_path?: string;
+
   document_id?: string;
+  repository_id?: string;
+
+  language?: string;
+  source_type?: string;
+
   chunk_index?: number;
   score?: number;
+  source_url?: string;
 }
 
 
@@ -37,7 +45,8 @@ export interface ChatHistoryResponse {
 export async function sendChatMessage(
   question: string,
   agentId: string,
-  documentId?: string
+  documentId: string | null = null,
+  repositoryId: string | null = null
 ): Promise<ChatResponse> {
 
   if (!question.trim()) {
@@ -46,20 +55,29 @@ export async function sendChatMessage(
     );
   }
 
-
   if (!agentId) {
     throw new Error(
       "Please select an agent first."
     );
   }
 
-
-  if (!documentId) {
+  if (
+    !documentId &&
+    !repositoryId
+  ) {
     throw new Error(
-      "Please select a document first."
+      "Please select a document or repository first."
     );
   }
 
+  if (
+    documentId &&
+    repositoryId
+  ) {
+    throw new Error(
+      "Select either a document or repository, not both."
+    );
+  }
 
   try {
 
@@ -75,38 +93,55 @@ export async function sendChatMessage(
 
           document_id:
             documentId,
+
+          repository_id:
+            repositoryId,
         }
       );
 
-
     return response.data;
-
 
   } catch (error: any) {
 
     console.error(
-      "CHAT REQUEST ERROR:",
+      "CHAT API ERROR:",
       error.response?.data ||
         error
     );
 
-
     const detail =
       error.response?.data?.detail;
 
-
     if (
-      typeof detail ===
-      "string"
+      typeof detail === "string"
     ) {
       throw new Error(
         detail
       );
     }
 
+    if (
+      Array.isArray(detail)
+    ) {
+      throw new Error(
+        detail
+          .map(
+            (item: any) =>
+              item?.msg ||
+              "Invalid request"
+          )
+          .join(", ")
+      );
+    }
+
+    if (!error.response) {
+      throw new Error(
+        "Unable to connect to backend API."
+      );
+    }
 
     throw new Error(
-      "Failed to get an AI response."
+      "Failed to get AI response."
     );
   }
 }
@@ -118,7 +153,8 @@ export async function sendChatMessage(
 
 export async function getChatHistory(
   agentId: string,
-  documentId?: string
+  documentId: string | null = null,
+  repositoryId: string | null = null
 ): Promise<ChatHistoryResponse> {
 
   if (!agentId) {
@@ -127,8 +163,51 @@ export async function getChatHistory(
     );
   }
 
+  if (
+    documentId &&
+    repositoryId
+  ) {
+    throw new Error(
+      "Select either a document or repository, not both."
+    );
+  }
+
+  if (
+    !documentId &&
+    !repositoryId
+  ) {
+    return {
+      messages: [],
+    };
+  }
 
   try {
+
+    // -------------------------------------------------
+    // BUILD QUERY PARAMETERS
+    // -------------------------------------------------
+
+    const params: {
+      document_id?: string;
+      repository_id?: string;
+    } = {};
+
+
+    if (documentId) {
+      params.document_id =
+        documentId;
+    }
+
+
+    if (repositoryId) {
+      params.repository_id =
+        repositoryId;
+    }
+
+
+    // -------------------------------------------------
+    // REQUEST
+    // -------------------------------------------------
 
     const response =
       await api.get<ChatHistoryResponse>(
@@ -136,13 +215,7 @@ export async function getChatHistory(
           agentId
         )}`,
         {
-          params:
-            documentId
-              ? {
-                  document_id:
-                    documentId,
-                }
-              : {},
+          params,
         }
       );
 
@@ -173,6 +246,13 @@ export async function getChatHistory(
     }
 
 
+    if (!error.response) {
+      throw new Error(
+        "Unable to connect to backend API."
+      );
+    }
+
+
     throw new Error(
       "Failed to load chat history."
     );
@@ -186,7 +266,8 @@ export async function getChatHistory(
 
 export async function clearChatHistory(
   agentId: string,
-  documentId?: string
+  documentId: string | null = null,
+  repositoryId: string | null = null
 ): Promise<void> {
 
   if (!agentId) {
@@ -196,24 +277,60 @@ export async function clearChatHistory(
   }
 
 
-  if (!documentId) {
+  if (
+    !documentId &&
+    !repositoryId
+  ) {
     throw new Error(
-      "Document ID is required."
+      "Please select a document or repository first."
+    );
+  }
+
+
+  if (
+    documentId &&
+    repositoryId
+  ) {
+    throw new Error(
+      "Select either a document or repository, not both."
     );
   }
 
 
   try {
 
+    // -------------------------------------------------
+    // BUILD QUERY PARAMETERS
+    // -------------------------------------------------
+
+    const params: {
+      document_id?: string;
+      repository_id?: string;
+    } = {};
+
+
+    if (documentId) {
+      params.document_id =
+        documentId;
+    }
+
+
+    if (repositoryId) {
+      params.repository_id =
+        repositoryId;
+    }
+
+
+    // -------------------------------------------------
+    // DELETE REQUEST
+    // -------------------------------------------------
+
     await api.delete(
       `/chat/history/${encodeURIComponent(
         agentId
       )}`,
       {
-        params: {
-          document_id:
-            documentId,
-        },
+        params,
       }
     );
 
@@ -237,6 +354,13 @@ export async function clearChatHistory(
     ) {
       throw new Error(
         detail
+      );
+    }
+
+
+    if (!error.response) {
+      throw new Error(
+        "Unable to connect to backend API."
       );
     }
 

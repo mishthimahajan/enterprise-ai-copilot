@@ -2,48 +2,109 @@
 
 import {
   CheckCircle2,
-  Loader2,
-  Database,
-  FolderGit2,
-  Brain,
+  Clock3,
+  XCircle,
 } from "lucide-react";
 
-export default function RepositoryStatus() {
-  return (
-    <div className="rounded-3xl border bg-white p-8 shadow-sm">
+import {
+  GitHubRepository,
+} from "@/services/github";
 
-   
 
-      <div className="mb-8">
+interface RepositoryStatusProps {
+  repositories:
+    GitHubRepository[];
 
-        <h2 className="text-2xl font-bold text-slate-900">
+  loading:
+    boolean;
+}
+
+
+export default function RepositoryStatus({
+  repositories,
+  loading,
+}: RepositoryStatusProps) {
+
+  if (loading) {
+
+    return (
+      <div className="rounded-2xl border bg-white p-6 shadow-sm">
+
+        <h2 className="text-xl font-semibold text-slate-900">
           Repository Status
         </h2>
 
-        <p className="mt-2 text-slate-500">
-          Current progress of repository analysis and indexing.
+
+        <p className="mt-3 text-slate-500">
+          Loading repository status...
         </p>
 
       </div>
+    );
+  }
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
 
-      
+  const processing =
+    repositories.filter(
+      (repo) =>
+        repo.status ===
+        "Processing"
+    );
 
-        <div className="rounded-2xl border p-6">
+
+  const failed =
+    repositories.filter(
+      (repo) =>
+        repo.status ===
+        "Failed"
+    );
+
+
+  const indexed =
+    repositories.filter(
+      (repo) =>
+        repo.status ===
+        "Indexed"
+    );
+
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+
+      <h2 className="text-xl font-semibold text-slate-900">
+        Repository Status
+      </h2>
+
+
+      <p className="mt-1 text-sm text-slate-500">
+        Current indexing status for this agent.
+      </p>
+
+
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
+
+
+        {/* INDEXED */}
+
+        <div className="rounded-xl border border-green-200 bg-green-50 p-4">
 
           <div className="flex items-center gap-3">
 
-            <FolderGit2 className="h-10 w-10 rounded-xl bg-blue-100 p-2 text-blue-600" />
+            <CheckCircle2
+              size={21}
+              className="text-green-600"
+            />
+
 
             <div>
 
-              <h3 className="font-semibold">
-                GitHub Connected
-              </h3>
+              <p className="text-sm text-green-700">
+                Indexed
+              </p>
 
-              <p className="text-sm text-green-600">
-                Connected
+
+              <p className="text-2xl font-bold text-green-900">
+                {indexed.length}
               </p>
 
             </div>
@@ -52,22 +113,28 @@ export default function RepositoryStatus() {
 
         </div>
 
-        
 
-        <div className="rounded-2xl border p-6">
+        {/* PROCESSING */}
+
+        <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4">
 
           <div className="flex items-center gap-3">
 
-            <CheckCircle2 className="h-10 w-10 rounded-xl bg-green-100 p-2 text-green-600" />
+            <Clock3
+              size={21}
+              className="text-yellow-600"
+            />
+
 
             <div>
 
-              <h3 className="font-semibold">
-                Repository Cloned
-              </h3>
+              <p className="text-sm text-yellow-700">
+                Processing
+              </p>
 
-              <p className="text-sm text-green-600">
-                Completed
+
+              <p className="text-2xl font-bold text-yellow-900">
+                {processing.length}
               </p>
 
             </div>
@@ -76,46 +143,28 @@ export default function RepositoryStatus() {
 
         </div>
 
-       
 
-        <div className="rounded-2xl border p-6">
+        {/* FAILED */}
+
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4">
 
           <div className="flex items-center gap-3">
 
-            <Brain className="h-10 w-10 rounded-xl bg-purple-100 p-2 text-purple-600" />
+            <XCircle
+              size={21}
+              className="text-red-600"
+            />
+
 
             <div>
 
-              <h3 className="font-semibold">
-                Embeddings
-              </h3>
-
-              <p className="text-sm text-orange-600">
-                Generating...
+              <p className="text-sm text-red-700">
+                Failed
               </p>
 
-            </div>
 
-          </div>
-
-        </div>
-
-        
-
-        <div className="rounded-2xl border p-6">
-
-          <div className="flex items-center gap-3">
-
-            <Database className="h-10 w-10 rounded-xl bg-orange-100 p-2 text-orange-600" />
-
-            <div>
-
-              <h3 className="font-semibold">
-                Vector Database
-              </h3>
-
-              <p className="text-sm text-slate-600">
-                Waiting...
+              <p className="text-2xl font-bold text-red-900">
+                {failed.length}
               </p>
 
             </div>
@@ -126,70 +175,14 @@ export default function RepositoryStatus() {
 
       </div>
 
-      {/* Progress */}
 
-      <div className="mt-10">
+      {repositories.length === 0 && (
 
-        <div className="mb-2 flex justify-between">
+        <p className="mt-5 text-sm text-slate-500">
+          No repository has been connected yet.
+        </p>
 
-          <span className="font-medium text-slate-700">
-            Indexing Progress
-          </span>
-
-          <span className="text-blue-600 font-semibold">
-            68%
-          </span>
-
-        </div>
-
-        <div className="h-3 w-full rounded-full bg-slate-200">
-
-          <div className="h-3 w-2/3 rounded-full bg-blue-600"></div>
-
-        </div>
-
-      </div>
-
-      {/* Processing Steps */}
-
-      <div className="mt-8 space-y-4">
-
-        <div className="flex items-center gap-3">
-
-          <CheckCircle2 className="text-green-600" size={20} />
-
-          <span>Repository validated successfully</span>
-
-        </div>
-
-        <div className="flex items-center gap-3">
-
-          <CheckCircle2 className="text-green-600" size={20} />
-
-          <span>Repository cloned successfully</span>
-
-        </div>
-
-        <div className="flex items-center gap-3">
-
-          <Loader2
-            className="animate-spin text-blue-600"
-            size={20}
-          />
-
-          <span>Generating vector embeddings...</span>
-
-        </div>
-
-        <div className="flex items-center gap-3 text-slate-400">
-
-          <Database size={20} />
-
-          <span>Uploading vectors to Qdrant...</span>
-
-        </div>
-
-      </div>
+      )}
 
     </div>
   );

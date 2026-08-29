@@ -5,10 +5,24 @@ import api from "./axios";
 
 export interface Agent {
   agent_id: string;
+
   name: string;
+
   description?: string;
-  owner_id: string;
-  members: string[];
+
+  owner_id?: string | null;
+
+  members?: string[];
+
+  created_by?: string | null;
+
+  created_by_name?: string | null;
+
+  is_active?: boolean;
+
+  created_at?: string | null;
+
+  updated_at?: string | null;
 }
 
 

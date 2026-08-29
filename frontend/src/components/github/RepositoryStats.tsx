@@ -1,142 +1,129 @@
 "use client";
 
 import {
-  Files,
+  Boxes,
+  Code2,
   FileCode2,
-  Brain,
-  MessageSquare,
-  Clock3,
-  GitBranch,
+  
+  SearchCheck,
 } from "lucide-react";
 
-const stats = [
-  {
-    title: "Total Files",
-    value: "1,248",
-    icon: Files,
-    color: "bg-blue-100 text-blue-600",
-  },
-  {
-    title: "Indexed Files",
-    value: "1,210",
-    icon: FileCode2,
-    color: "bg-green-100 text-green-600",
-  },
-  {
-    title: "Vector Embeddings",
-    value: "18,562",
-    icon: Brain,
-    color: "bg-purple-100 text-purple-600",
-  },
-  {
-    title: "AI Questions",
-    value: "248",
-    icon: MessageSquare,
-    color: "bg-orange-100 text-orange-600",
-  },
-];
 
-export default function RepositoryStats() {
+interface RepositoryStatsProps {
+  total: number;
+  indexed: number;
+  files: number;
+  chunks: number;
+}
+
+
+export default function RepositoryStats({
+  total,
+  indexed,
+  files,
+  chunks,
+}: RepositoryStatsProps) {
+
   return (
-    <div className="rounded-3xl border bg-white p-8 shadow-sm">
+    <div>
 
-      {/* Header */}
+      <h2 className="text-xl font-semibold text-slate-900">
+        Repository Knowledge
+      </h2>
 
-      <div className="mb-8">
 
-        <h2 className="text-2xl font-bold text-slate-900">
-          Repository Statistics
-        </h2>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
 
-        <p className="mt-2 text-slate-500">
-          Overview of the connected repository and AI indexing progress.
-        </p>
+
+        <StatCard
+          title="Repositories"
+          value={
+            total
+          }
+          icon={
+            <Code2
+              size={22}
+            />
+          }
+        />
+
+
+        <StatCard
+          title="Indexed"
+          value={
+            indexed
+          }
+          icon={
+            <SearchCheck
+              size={22}
+            />
+          }
+        />
+
+
+        <StatCard
+          title="Source Files"
+          value={
+            files
+          }
+          icon={
+            <FileCode2
+              size={22}
+            />
+          }
+        />
+
+
+        <StatCard
+          title="Code Chunks"
+          value={
+            chunks
+          }
+          icon={
+            <Boxes
+              size={22}
+            />
+          }
+        />
 
       </div>
 
-      {/* Statistics */}
+    </div>
+  );
+}
 
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
 
-        {stats.map((stat) => {
-          const Icon = stat.icon;
+function StatCard({
+  title,
+  value,
+  icon,
+}: {
+  title: string;
+  value: number;
+  icon: React.ReactNode;
+}) {
 
-          return (
-            <div
-              key={stat.title}
-              className="rounded-2xl border p-6 transition hover:shadow-md"
-            >
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
 
-              <div
-                className={`flex h-14 w-14 items-center justify-center rounded-2xl ${stat.color}`}
-              >
-                <Icon size={28} />
-              </div>
+      <div className="flex items-center justify-between">
 
-              <h3 className="mt-5 text-3xl font-bold text-slate-900">
-                {stat.value}
-              </h3>
+        <div>
 
-              <p className="mt-2 text-slate-500">
-                {stat.title}
-              </p>
+          <p className="text-sm text-slate-500">
+            {title}
+          </p>
 
-            </div>
-          );
-        })}
 
-      </div>
-
-      
-
-      <div className="mt-10 grid gap-6 md:grid-cols-2">
-
-       
-
-        <div className="rounded-2xl bg-slate-50 p-6">
-
-          <div className="flex items-center gap-3">
-
-            <Clock3 className="text-blue-600" size={24} />
-
-            <div>
-
-              <h3 className="font-semibold text-slate-900">
-                Last Synchronization
-              </h3>
-
-              <p className="text-slate-500">
-                Today • 10:42 AM
-              </p>
-
-            </div>
-
-          </div>
+          <p className="mt-2 text-3xl font-bold text-slate-900">
+            {value}
+          </p>
 
         </div>
 
-       
 
-        <div className="rounded-2xl bg-slate-50 p-6">
-
-          <div className="flex items-center gap-3">
-
-            <GitBranch className="text-green-600" size={24} />
-
-            <div>
-
-              <h3 className="font-semibold text-slate-900">
-                Active Branch
-              </h3>
-
-              <p className="text-slate-500">
-                main
-              </p>
-
-            </div>
-
-          </div>
-
+        <div className="rounded-xl bg-blue-50 p-3 text-blue-600">
+          {icon}
         </div>
 
       </div>
