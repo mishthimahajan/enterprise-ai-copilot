@@ -1231,3 +1231,71 @@ def reindex_repository(
         )
 
     return result
+
+
+@router.delete("/repositories/{repository_id}")
+def delete_repository(
+    repository_id: str,
+    token: dict = Depends(decode_access_token),
+):
+    # Verify logged-in user
+    get_authenticated_user_id(token)
+
+    # Find repository
+    repository = repositories_collection.find_one(
+        {
+            "repository_id": repository_id
+        }
+    )
+
+    if not repository:
+        raise HTTPException(
+            status_code=404,
+            detail="Repository not found.",
+        )
+
+    agent_id = repository.get("agent_id")
+
+    if not agent_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Repository does not have a valid agent_id.",
+        )
+
+    # Verify shared agent still exists / is active
+    verify_shared_agent(agent_id)
+
+    # Delete repository chunks from Qdrant
+    try:
+        delete_repository_chunks(
+            repository_id=repository_id,
+            agent_id=agent_id,
+        )
+    except Exception as error:
+        print(
+            "DELETE REPOSITORY QDRANT ERROR:",
+            error,
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to delete repository vectors.",
+        )
+
+    # Delete MongoDB repository record
+    result = repositories_collection.delete_one(
+        {
+            "repository_id": repository_id
+        }
+    )
+
+    if result.deleted_count == 0:
+        raise HTTPException(
+            status_code=404,
+            detail="Repository could not be deleted.",
+        )
+
+    return {
+        "message": "Repository deleted successfully.",
+        "repository_id": repository_id,
+    }

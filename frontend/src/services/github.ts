@@ -177,3 +177,33 @@ export async function reindexRepository(
     );
   }
 }
+
+export async function deleteRepository(
+  repositoryId: string
+) {
+  try {
+    const response = await api.delete(
+      `/github/repositories/${repositoryId}`
+    );
+
+    return response.data;
+
+  } catch (error: any) {
+
+    console.error(
+      "DELETE REPOSITORY ERROR:",
+      error.response?.data || error
+    );
+
+    const detail =
+      error.response?.data?.detail;
+
+    if (typeof detail === "string") {
+      throw new Error(detail);
+    }
+
+    throw new Error(
+      "Failed to delete repository."
+    );
+  }
+}

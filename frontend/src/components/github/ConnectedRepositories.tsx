@@ -10,6 +10,7 @@ import {
   Code2,
   MessageSquare,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 
 import {
@@ -35,6 +36,12 @@ interface ConnectedRepositoriesProps {
   ) => void;
 
   reindexingId: string | null;
+
+  onDelete: (
+    repositoryId: string
+  ) => void;
+
+  deletingId: string | null;
 }
 
 
@@ -45,6 +52,8 @@ export default function ConnectedRepositories({
   onOpenChat,
   onReindex,
   reindexingId,
+  onDelete,
+  deletingId,
 }: ConnectedRepositoriesProps) {
 
   const [
@@ -62,19 +71,15 @@ export default function ConnectedRepositories({
     const saved =
       getSelectedRepository();
 
-
     if (
       saved &&
       repositories.some(
         (repository) =>
-          repository.repository_id ===
-          saved
+          repository.repository_id === saved
       )
     ) {
 
-      setSelectedId(
-        saved
-      );
+      setSelectedId(saved);
 
     } else {
 
@@ -98,7 +103,6 @@ export default function ConnectedRepositories({
     setSelectedId(
       repositoryId
     );
-
 
     onSelect(
       repositoryId
@@ -137,7 +141,6 @@ export default function ConnectedRepositories({
           Connected Repositories
         </h2>
 
-
         <p className="mt-1 text-sm text-slate-500">
           Repositories indexed for the selected agent.
         </p>
@@ -156,11 +159,9 @@ export default function ConnectedRepositories({
             className="mx-auto text-slate-300"
           />
 
-
           <p className="mt-4 font-medium text-slate-700">
             No repositories connected
           </p>
-
 
           <p className="mt-2 text-sm text-slate-500">
             Connect a GitHub repository using the form above.
@@ -179,9 +180,12 @@ export default function ConnectedRepositories({
                 selectedId ===
                 repository.repository_id;
 
-
               const isReindexing =
                 reindexingId ===
+                repository.repository_id;
+
+              const isDeleting =
+                deletingId ===
                 repository.repository_id;
 
 
@@ -213,7 +217,6 @@ export default function ConnectedRepositories({
                           size={20}
                           className="text-slate-600"
                         />
-
 
                         <h3 className="truncate font-semibold text-slate-900">
 
@@ -252,6 +255,21 @@ export default function ConnectedRepositories({
                             />
 
                             Re-indexing
+
+                          </span>
+
+                        )}
+
+
+                        {isDeleting && (
+
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700">
+
+                            <Trash2
+                              size={12}
+                            />
+
+                            Deleting
 
                           </span>
 
@@ -301,6 +319,23 @@ export default function ConnectedRepositories({
 
                       </div>
 
+
+                      {/* LAST SYNCED */}
+
+                      <div className="mt-3 text-sm text-slate-500">
+
+                        Last synced:{" "}
+
+                        <span className="font-medium text-slate-700">
+
+                          {formatDate(
+                            repository.updated_at
+                          )}
+
+                        </span>
+
+                      </div>
+
                     </div>
 
 
@@ -344,7 +379,8 @@ export default function ConnectedRepositories({
 
                         disabled={
                           repository.status !== "Indexed" ||
-                          isReindexing
+                          isReindexing ||
+                          isDeleting
                         }
 
                         className={`rounded-lg px-4 py-2 text-sm font-medium ${
@@ -374,7 +410,8 @@ export default function ConnectedRepositories({
 
                         disabled={
                           repository.status !== "Indexed" ||
-                          isReindexing
+                          isReindexing ||
+                          isDeleting
                         }
 
                         className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -401,7 +438,8 @@ export default function ConnectedRepositories({
                         }
 
                         disabled={
-                          isReindexing
+                          isReindexing ||
+                          isDeleting
                         }
 
                         className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -416,10 +454,39 @@ export default function ConnectedRepositories({
                           }
                         />
 
-
                         {isReindexing
                           ? "Re-indexing..."
                           : "Re-index"}
+
+                      </button>
+
+
+                      {/* DELETE */}
+
+                      <button
+                        type="button"
+
+                        onClick={() =>
+                          onDelete(
+                            repository.repository_id
+                          )
+                        }
+
+                        disabled={
+                          isDeleting ||
+                          isReindexing
+                        }
+
+                        className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+
+                        <Trash2
+                          size={16}
+                        />
+
+                        {isDeleting
+                          ? "Deleting..."
+                          : "Delete"}
 
                       </button>
 
@@ -463,10 +530,9 @@ function getRepositoryName(
           ""
         );
 
-
     return (
-      clean.split("/").pop()
-      || "Repository"
+      clean.split("/").pop() ||
+      "Repository"
     );
 
   } catch {
@@ -522,4 +588,33 @@ function RepositoryBadge({
     </span>
 
   );
+}
+
+
+// =========================================================
+// FORMAT LAST SYNCED DATE
+// =========================================================
+
+function formatDate(
+  dateValue?: string | null
+) {
+
+  if (!dateValue) {
+    return "Not available";
+  }
+
+  const date =
+    new Date(
+      dateValue
+    );
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "Not available";
+  }
+
+  return date.toLocaleString();
 }

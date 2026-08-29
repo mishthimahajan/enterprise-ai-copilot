@@ -8,7 +8,10 @@ import {
 import {
   useRouter,
 } from "next/navigation";
-import { reindexRepository } from "@/services/github";
+import {
+  reindexRepository,
+  deleteRepository,
+} from "@/services/github";
 
 import GitHubConnectionCard from "@/components/github/GitHubConnectionCard";
 import ConnectedRepositories from "@/components/github/ConnectedRepositories";
@@ -69,6 +72,11 @@ export default function GitHubPage() {
   ] = useState("");
   const [reindexingId, setReindexingId] =
   useState<string | null>(null);
+
+  const [
+  deletingId,
+  setDeletingId,
+] = useState<string | null>(null);
 
 
   useEffect(() => {
@@ -257,7 +265,70 @@ export default function GitHubPage() {
     setReindexingId(null);
   }
 }
+async function handleDeleteRepository(
+  repositoryId: string
+) {
+  const confirmed = window.confirm(
+    "Are you sure you want to delete this repository? This will remove its indexed data as well."
+  );
 
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setDeletingId(repositoryId);
+
+    setError("");
+    setSuccess("");
+
+    await deleteRepository(
+      repositoryId
+    );
+
+    const selectedRepositoryId =
+      localStorage.getItem(
+        "selected_repository_id"
+      );
+
+    if (
+      selectedRepositoryId ===
+      repositoryId
+    ) {
+      localStorage.removeItem(
+        "selected_repository_id"
+      );
+    }
+
+    await loadRepositories(
+      agentId
+    );
+
+    setSuccess(
+      "Repository deleted successfully."
+    );
+
+    setTimeout(() => {
+      setSuccess("");
+    }, 3000);
+
+  } catch (error: any) {
+
+    console.error(
+      "DELETE REPOSITORY ERROR:",
+      error
+    );
+
+    setError(
+      error.message ||
+        "Failed to delete repository."
+    );
+
+  } finally {
+
+    setDeletingId(null);
+  }
+}
 
   // =========================================================
   // SELECT REPOSITORY
@@ -485,6 +556,12 @@ export default function GitHubPage() {
   }
   reindexingId={
     reindexingId
+  }
+  onDelete={
+    handleDeleteRepository
+  }
+  deletingId={
+    deletingId
   }
 />
 
