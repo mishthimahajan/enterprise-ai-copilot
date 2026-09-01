@@ -89,14 +89,7 @@ const redirect = searchParams.get("redirect") || "/dashboard";
 
       });
 
-      /*
-       * Your useAuth hook may already redirect
-       * after successful login.
-       *
-       * If it DOES NOT redirect, uncomment:
-       *
-       * router.replace("/dashboard");
-       */
+      
 
     } catch (err: any) {
 
