@@ -80,13 +80,15 @@ export default function GitHubPage() {
 
 
   useEffect(() => {
-    initializePage();
-  }, []);
+  const token = localStorage.getItem("access_token");
+
+  if (!token) {
+    router.replace("/login?redirect=/github");
+    return;
+  }
+}, [router]);
 
 
-  // =========================================================
-  // INITIALIZE
-  // =========================================================
 
   async function initializePage() {
     try {

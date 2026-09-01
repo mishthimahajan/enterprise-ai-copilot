@@ -7,9 +7,7 @@ import {
 
 import Link from "next/link";
 
-import {
-  useRouter,
-} from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import {
   Lock,
@@ -24,8 +22,10 @@ import useAuth from "@/hooks/useAuth";
 
 export default function LoginForm() {
 
-  const router =
-    useRouter();
+  const router = useRouter();
+const searchParams = useSearchParams();
+
+const redirect = searchParams.get("redirect") || "/dashboard";
 
 
   const {
@@ -46,9 +46,8 @@ export default function LoginForm() {
   ] = useState("");
 
 
-  // =====================================================
-  // ALREADY LOGGED IN CHECK
-  // =====================================================
+
+
 
   useEffect(() => {
 
@@ -58,22 +57,18 @@ export default function LoginForm() {
       );
 
 
-    // User already has a valid login session.
-    // Don't show login page again.
+    
     if (token) {
 
-      router.replace(
-        "/dashboard"
-      );
+      router.push(redirect);
 
     }
 
   }, [router]);
 
 
-  // =====================================================
-  // LOGIN
-  // =====================================================
+
+
 
   const handleSubmit = async (
     e: React.FormEvent<HTMLFormElement>
