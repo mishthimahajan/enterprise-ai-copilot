@@ -84,8 +84,11 @@ export default function GitHubPage() {
 
   if (!token) {
     router.replace("/login?redirect=/github");
+    setLoading(false);
     return;
   }
+
+  initializePage();
 }, [router]);
 
 
