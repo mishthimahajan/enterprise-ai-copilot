@@ -578,6 +578,7 @@
 
 
 
+
 "use client";
 
 import {
@@ -628,6 +629,11 @@ export default function GitHubPage() {
   const [
     agentId,
     setAgentId,
+  ] = useState("");
+
+  const [
+    selectedRepositoryId,
+    setSelectedRepositoryId,
   ] = useState("");
 
   const [
@@ -727,6 +733,17 @@ export default function GitHubPage() {
       setAgentId(
         selectedAgentId
       );
+
+      const savedRepositoryId =
+        localStorage.getItem(
+          "selected_repository_id"
+        );
+
+      if (savedRepositoryId) {
+        setSelectedRepositoryId(
+          savedRepositoryId
+        );
+      }
 
       await loadRepositories(
         selectedAgentId
@@ -889,18 +906,20 @@ export default function GitHubPage() {
         repositoryId
       );
 
-      const selectedRepositoryId =
+      const savedRepositoryId =
         localStorage.getItem(
           "selected_repository_id"
         );
 
       if (
-        selectedRepositoryId ===
+        savedRepositoryId ===
         repositoryId
       ) {
         localStorage.removeItem(
           "selected_repository_id"
         );
+
+        setSelectedRepositoryId("");
       }
 
       await loadRepositories(
@@ -940,6 +959,10 @@ export default function GitHubPage() {
       repositoryId
     );
 
+    setSelectedRepositoryId(
+      repositoryId
+    );
+
     setSuccess(
       "Repository selected successfully."
     );
@@ -963,6 +986,10 @@ export default function GitHubPage() {
 
     localStorage.removeItem(
       "selected_document_id"
+    );
+
+    setSelectedRepositoryId(
+      repositoryId
     );
 
     router.push(
@@ -1479,22 +1506,18 @@ export default function GitHubPage() {
               </div>
 
               <button
+                type="button"
                 onClick={() => {
-                  const repositoryId =
-                    localStorage.getItem(
-                      "selected_repository_id"
-                    );
-
-                  if (repositoryId) {
+                  if (
+                    selectedRepositoryId
+                  ) {
                     handleOpenChat(
-                      repositoryId
+                      selectedRepositoryId
                     );
                   }
                 }}
                 disabled={
-                  !localStorage.getItem(
-                    "selected_repository_id"
-                  )
+                  !selectedRepositoryId
                 }
                 className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-linear-to-r from-blue-600 via-violet-600 to-cyan-500 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
               >
