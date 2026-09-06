@@ -1,5 +1,8 @@
 import API from "./api";
-import api from "@/lib/axios";
+
+/* =========================================================
+   TYPES
+========================================================= */
 
 export interface GitHubRepository {
   repository_id: string;
@@ -9,6 +12,7 @@ export interface GitHubRepository {
   status: string;
   files_indexed: number;
   chunks: number;
+
   connected_by?: string;
   created_at?: string;
   updated_at?: string;
@@ -44,6 +48,10 @@ export interface ConnectRepositoryResponse {
   };
 }
 
+/* =========================================================
+   CONNECT REPOSITORY
+========================================================= */
+
 export async function connectRepository(
   data: ConnectRepositoryData
 ): Promise<ConnectRepositoryResponse> {
@@ -55,21 +63,28 @@ export async function connectRepository(
       );
 
     return response.data;
-
   } catch (error: any) {
     console.error(
       "GITHUB CONNECT ERROR:",
-      error.response?.data || error
+      error?.response?.data ||
+        error
     );
 
     const detail =
-      error.response?.data?.detail;
+      error?.response?.data?.detail;
 
-    if (typeof detail === "string") {
-      throw new Error(detail);
+    if (
+      typeof detail ===
+      "string"
+    ) {
+      throw new Error(
+        detail
+      );
     }
 
-    if (!error.response) {
+    if (
+      !error?.response
+    ) {
       throw new Error(
         "Unable to connect to the backend API."
       );
@@ -81,6 +96,10 @@ export async function connectRepository(
   }
 }
 
+/* =========================================================
+   GET REPOSITORIES
+========================================================= */
+
 export async function getRepositories(
   agentId: string
 ): Promise<GitHubRepositoriesResponse> {
@@ -90,24 +109,38 @@ export async function getRepositories(
         "/github/repositories",
         {
           params: {
-            agent_id: agentId,
+            agent_id:
+              agentId,
           },
         }
       );
 
     return response.data;
-
   } catch (error: any) {
     console.error(
       "GET REPOSITORIES ERROR:",
-      error.response?.data || error
+      error?.response?.data ||
+        error
     );
 
     const detail =
-      error.response?.data?.detail;
+      error?.response?.data?.detail;
 
-    if (typeof detail === "string") {
-      throw new Error(detail);
+    if (
+      typeof detail ===
+      "string"
+    ) {
+      throw new Error(
+        detail
+      );
+    }
+
+    if (
+      !error?.response
+    ) {
+      throw new Error(
+        "Unable to connect to the backend API."
+      );
     }
 
     throw new Error(
@@ -116,14 +149,21 @@ export async function getRepositories(
   }
 }
 
+/* =========================================================
+   SELECTED REPOSITORY
+========================================================= */
+
 export function setSelectedRepository(
   repositoryId: string
-) {
-  if (typeof window === "undefined") {
+): void {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
     return;
   }
 
-  localStorage.setItem(
+  window.localStorage.setItem(
     "selected_repository_id",
     repositoryId
   );
@@ -131,45 +171,71 @@ export function setSelectedRepository(
 
 export function getSelectedRepository():
   string | null {
-
-  if (typeof window === "undefined") {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
     return null;
   }
 
-  return localStorage.getItem(
+  return window.localStorage.getItem(
     "selected_repository_id"
   );
 }
 
-export function clearSelectedRepository() {
-  if (typeof window === "undefined") {
+export function clearSelectedRepository():
+  void {
+  if (
+    typeof window ===
+    "undefined"
+  ) {
     return;
   }
 
-  localStorage.removeItem(
+  window.localStorage.removeItem(
     "selected_repository_id"
   );
 }
+
+/* =========================================================
+   REINDEX REPOSITORY
+========================================================= */
 
 export async function reindexRepository(
   repositoryId: string
 ) {
   try {
-    const response = await api.post(
-      `/github/repositories/${repositoryId}/reindex`
-    );
+    const response =
+      await API.post(
+        `/github/repositories/${repositoryId}/reindex`
+      );
 
     return response.data;
   } catch (error: any) {
     console.error(
       "REINDEX REPOSITORY ERROR:",
-      error.response?.data || error
+      error?.response?.data ||
+        error
     );
 
-    const detail = error.response?.data?.detail;
+    const detail =
+      error?.response?.data?.detail;
 
-    if (typeof detail === "string") {
-      throw new Error(detail);
+    if (
+      typeof detail ===
+      "string"
+    ) {
+      throw new Error(
+        detail
+      );
+    }
+
+    if (
+      !error?.response
+    ) {
+      throw new Error(
+        "Unable to connect to the backend API."
+      );
     }
 
     throw new Error(
@@ -178,28 +244,45 @@ export async function reindexRepository(
   }
 }
 
+/* =========================================================
+   DELETE REPOSITORY
+========================================================= */
+
 export async function deleteRepository(
   repositoryId: string
 ) {
   try {
-    const response = await api.delete(
-      `/github/repositories/${repositoryId}`
-    );
+    const response =
+      await API.delete(
+        `/github/repositories/${repositoryId}`
+      );
 
     return response.data;
-
   } catch (error: any) {
-
     console.error(
       "DELETE REPOSITORY ERROR:",
-      error.response?.data || error
+      error?.response?.data ||
+        error
     );
 
     const detail =
-      error.response?.data?.detail;
+      error?.response?.data?.detail;
 
-    if (typeof detail === "string") {
-      throw new Error(detail);
+    if (
+      typeof detail ===
+      "string"
+    ) {
+      throw new Error(
+        detail
+      );
+    }
+
+    if (
+      !error?.response
+    ) {
+      throw new Error(
+        "Unable to connect to the backend API."
+      );
     }
 
     throw new Error(
