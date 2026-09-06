@@ -24,3 +24,13 @@ class UserResponse(BaseModel):
     email: str
     agent_id: str
     role: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    agent_id: str
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    reset_token: str
+    new_password: str
