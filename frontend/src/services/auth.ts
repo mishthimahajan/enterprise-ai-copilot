@@ -301,45 +301,28 @@ export async function loginUser(
 
 
 
-export function logoutUser() {
-
+function logoutUser() {
   if (
-    typeof window === "undefined"
+    typeof window ===
+    "undefined"
   ) {
     return;
   }
 
-
-  
-  localStorage.removeItem(
+  window.localStorage.removeItem(
     "access_token"
   );
 
-
-  
-  localStorage.removeItem(
-    "token"
-  );
-
-
-
-
-  localStorage.removeItem(
+  window.localStorage.removeItem(
     "selected_agent_id"
   );
 
-  localStorage.removeItem(
+  window.localStorage.removeItem(
     "selected_document_id"
   );
 
-  localStorage.removeItem(
+  window.localStorage.removeItem(
     "selected_repository_id"
-  );
-
-
-  // User information
-  localStorage.removeItem(
-    "user"
   );
 }
 

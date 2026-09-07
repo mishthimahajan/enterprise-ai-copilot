@@ -263,7 +263,6 @@
 "use client";
 
 import {
-  useEffect,
   useState,
   type FormEvent,
   type ElementType,
@@ -339,89 +338,86 @@ export default function LoginForm() {
     setError,
   ] = useState("");
 
-  // =========================================================
-  // REDIRECT AUTHENTICATED USER
-  // =========================================================
-
-  useEffect(() => {
-    const token =
-      localStorage.getItem(
-        "access_token"
-      );
-
-    if (token) {
-      router.replace(
-        redirect
-      );
-    }
-  }, [
-    router,
-    redirect,
-  ]);
-
-  // =========================================================
-  // LOGIN
-  // =========================================================
 
   async function handleSubmit(
-    event:
-      FormEvent<HTMLFormElement>
-  ) {
-    event.preventDefault();
+  event: FormEvent<HTMLFormElement>
+) {
+  event.preventDefault();
 
-    setError("");
+  setError("");
 
-    const cleanEmployeeId =
-      employeeId.trim();
+  const cleanEmployeeId =
+    employeeId.trim();
 
-    if (!cleanEmployeeId) {
-      setError(
-        "Employee ID is required."
-      );
-
-      return;
-    }
-
-    if (!password) {
-      setError(
-        "Password is required."
-      );
-
-      return;
-    }
-
-    try {
-      await loginUser({
-        // Backend currently expects this field name.
-        agent_id:
-          cleanEmployeeId,
-
-        password,
-      });
-
-      /*
-       * loginUser should save access_token.
-       * Once authentication succeeds, send the
-       * user to the originally requested page.
-       */
-      router.replace(
-        redirect
-      );
-    } catch (
-      err: any
-    ) {
-      console.error(
-        "LOGIN ERROR:",
-        err
-      );
-
-      setError(
-        err?.message ||
-          "Unable to sign in. Please check your credentials."
-      );
-    }
+  if (!cleanEmployeeId) {
+    setError(
+      "Employee ID is required."
+    );
+    return;
   }
 
+  if (!password) {
+    setError(
+      "Password is required."
+    );
+    return;
+  }
+
+  try {
+    /*
+     * Clear account-specific workspace state before
+     * authenticating another user.
+     *
+     * Do NOT remove access_token here yet.
+     * If login fails, the existing session is not
+     * unnecessarily destroyed.
+     */
+    if (
+      typeof window !==
+      "undefined"
+    ) {
+      window.localStorage.removeItem(
+        "selected_agent_id"
+      );
+
+      window.localStorage.removeItem(
+        "selected_document_id"
+      );
+
+      window.localStorage.removeItem(
+        "selected_repository_id"
+      );
+    }
+
+    await loginUser({
+      // Backend expects agent_id,
+      // but UI correctly calls this Employee ID.
+      agent_id:
+        cleanEmployeeId,
+
+      password,
+    });
+
+    /*
+     * loginUser should overwrite access_token
+     * with the newly authenticated user's JWT.
+     */
+
+    router.replace(
+      redirect
+    );
+  } catch (err: any) {
+    console.error(
+      "LOGIN ERROR:",
+      err
+    );
+
+    setError(
+      err?.message ||
+        "Unable to sign in. Please check your credentials."
+    );
+  }
+}
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#F6F8FC]">
       {/* =====================================================
@@ -907,9 +903,6 @@ export default function LoginForm() {
   );
 }
 
-/* =========================================================
-   PIPELINE STEP
-========================================================= */
 
 function PipelineStep({
   icon: Icon,
@@ -934,9 +927,7 @@ function PipelineStep({
   );
 }
 
-/* =========================================================
-   PRODUCT FEATURE
-========================================================= */
+
 
 function ProductFeature({
   icon: Icon,
@@ -969,9 +960,7 @@ function ProductFeature({
   );
 }
 
-/* =========================================================
-   TRUST ITEM
-========================================================= */
+
 
 function LoginTrustItem({
   text,

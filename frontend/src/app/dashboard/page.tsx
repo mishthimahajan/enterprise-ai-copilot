@@ -1139,10 +1139,11 @@ import {
   getDocuments,
 } from "@/lib/documents";
 
-import { logoutUser } from "@/services/auth";
+import useAuth from "@/hooks/useAuth";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { logoutUser } = useAuth();
 
   const [agents, setAgents] = useState<Agent[]>([]);
 

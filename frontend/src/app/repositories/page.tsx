@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect,useState } from "react";
 import { useRouter } from "next/navigation";
 
 import Sidebar from "@/components/dashboard/Sidebar";
@@ -12,13 +12,16 @@ import ChatPreview from "@/components/chat/ChatPreview";
 export default function DashboardPage() {
   const router = useRouter();
 
-  useEffect(() => {
-    const token = localStorage.getItem("access_token");
+  const [token, setToken] = useState<string | null>(null);
 
-    if (!token) {
-      router.replace("/login?redirect=/repositories");
-    }
-  }, [router]);
+useEffect(() => {
+  const savedToken =
+    window.localStorage.getItem(
+      "access_token"
+    );
+
+  setToken(savedToken);
+}, []);
 
   return (
     <div className="flex min-h-screen bg-slate-100">
