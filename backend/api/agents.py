@@ -28,9 +28,7 @@ router = APIRouter(
 )
 
 
-# =========================================================
-# HELPERS
-# =========================================================
+
 
 
 def get_authenticated_user_id(
@@ -98,9 +96,7 @@ def serialize_agent(
     }
 
 
-# =========================================================
-# CREATE AGENT
-# =========================================================
+
 
 
 @router.post(
@@ -213,9 +209,6 @@ def create_agent(
     )
 
 
-# =========================================================
-# GET ALL SHARED AGENTS
-# =========================================================
 
 
 @router.get(
@@ -286,9 +279,7 @@ def get_all_agents(
     return result
 
 
-# =========================================================
-# GET SINGLE SHARED AGENT
-# =========================================================
+
 
 
 @router.get(
@@ -337,23 +328,14 @@ def get_agent(
             detail="Agent not found",
         )
 
-    # IMPORTANT:
-    # We intentionally removed the old:
-    #
-    # owner_id != user_id
-    # and user_id not in members
-    #
-    # restriction because agents are now
-    # organization-wide shared workspaces.
+    
 
     return serialize_agent(
         agent
     )
 
 
-# =========================================================
-# ADD MEMBER
-# =========================================================
+
 
 
 @router.post(
@@ -511,9 +493,7 @@ def add_member(
     )
 
 
-# =========================================================
-# REMOVE MEMBER
-# =========================================================
+
 
 
 @router.delete(

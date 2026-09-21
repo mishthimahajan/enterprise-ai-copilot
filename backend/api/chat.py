@@ -22,6 +22,7 @@ from services.qdrant_service import (
 
 from services.chat_service import (
     generate_answer,
+    GeminiTemporarilyUnavailable,
 )
 
 from services.chat_history_service import (
@@ -36,9 +37,7 @@ from database.mongodb import (
 )
 
 
-# =========================================================
-# ROUTER
-# =========================================================
+
 
 router = APIRouter(
     prefix="/chat",
@@ -46,9 +45,7 @@ router = APIRouter(
 )
 
 
-# =========================================================
-# REQUEST MODEL
-# =========================================================
+
 
 class ChatRequest(BaseModel):
     question: str = Field(
@@ -65,9 +62,7 @@ class ChatRequest(BaseModel):
     repository_id: Optional[str] = None
 
 
-# =========================================================
-# SOURCE MODEL
-# =========================================================
+
 
 class ChatSource(BaseModel):
     filename: Optional[str] = None
@@ -86,18 +81,14 @@ class ChatSource(BaseModel):
 
 
 
-# =========================================================
-# CHAT RESPONSE
-# =========================================================
+
 
 class ChatResponse(BaseModel):
     answer: str
     sources: List[ChatSource] = []
 
 
-# =========================================================
-# HISTORY MODELS
-# =========================================================
+
 
 class HistoryMessage(BaseModel):
     role: str
@@ -109,9 +100,7 @@ class ChatHistoryResponse(BaseModel):
     messages: List[HistoryMessage]
 
 
-# =========================================================
-# VERIFY AGENT ACCESS
-# =========================================================
+
 
 def verify_agent_access(
     agent_id: str,
@@ -150,9 +139,7 @@ def verify_agent_access(
     return agent
 
 
-# =========================================================
-# VERIFY REPOSITORY
-# =========================================================
+
 
 def verify_repository(
     repository_id: str,
@@ -191,9 +178,7 @@ def verify_repository(
     return repository
 
 
-# =========================================================
-# NORMALIZE OPTIONAL ID
-# =========================================================
+
 
 def normalize_optional_id(
     value: Optional[str],
@@ -210,9 +195,7 @@ def normalize_optional_id(
     return value
 
 
-# =========================================================
-# POST /chat
-# =========================================================
+
 
 @router.post(
     "",
@@ -225,9 +208,7 @@ def chat(
     ),
 ):
 
-    # =====================================================
-    # QUESTION
-    # =====================================================
+    
 
     question = request.question.strip()
 
@@ -238,9 +219,7 @@ def chat(
         )
 
 
-    # =====================================================
-    # USER
-    # =====================================================
+    
 
     user_id = token.get(
         "user_id"
@@ -253,10 +232,7 @@ def chat(
         )
 
 
-    # =====================================================
-    # AGENT
-    # =====================================================
-
+    
     agent_id = request.agent_id.strip()
 
     if not agent_id:
@@ -271,9 +247,7 @@ def chat(
     )
 
 
-    # =====================================================
-    # NORMALIZE KNOWLEDGE SOURCE IDS
-    # =====================================================
+    
 
     document_id = normalize_optional_id(
         request.document_id
@@ -284,10 +258,7 @@ def chat(
     )
 
 
-    # =====================================================
-    # REQUIRE ONE KNOWLEDGE SOURCE
-    # =====================================================
-
+    
     if (
         not document_id
         and
@@ -317,9 +288,7 @@ def chat(
 
     try:
 
-        # =================================================
-        # VERIFY REPOSITORY
-        # =================================================
+        
         repository = None
         if repository_id:
             verify_repository(
@@ -328,9 +297,7 @@ def chat(
             )
 
 
-        # =================================================
-        # LOAD CHAT HISTORY
-        # =================================================
+        
 
         if repository_id:
 
@@ -366,13 +333,7 @@ def chat(
         )
 
 
-        # =================================================
-        # RETRIEVE KNOWLEDGE
-        # =================================================
-
-        # -------------------------------------------------
-        # GITHUB REPOSITORY MODE
-        # -------------------------------------------------
+       
 
         if repository_id:
 
@@ -395,9 +356,7 @@ def chat(
             )
 
 
-        # -------------------------------------------------
-        # DOCUMENT MODE
-        # -------------------------------------------------
+        
 
         elif document_id:
 
@@ -431,9 +390,7 @@ def chat(
             )
 
 
-        # =================================================
-        # CHECK RETRIEVAL
-        # =================================================
+        
 
         print(
             (
@@ -464,9 +421,7 @@ def chat(
             )
 
 
-        # =================================================
-        # LOG SOURCES
-        # =================================================
+        
 
         for item in context:
 
@@ -483,9 +438,7 @@ def chat(
             )
 
 
-        # =================================================
-        # GENERATE ANSWER
-        # =================================================
+        
 
         answer = generate_answer(
             question=question,
@@ -494,13 +447,7 @@ def chat(
         )
 
 
-        # =================================================
-        # CREATE SOURCES
-        # =================================================
-        #
-        # IMPORTANT:
-        # Build sources BEFORE saving messages.
-        # =================================================
+        
 
         sources = []
 
@@ -553,12 +500,7 @@ def chat(
             )
 
 
-        # =================================================
-        # SAVE USER MESSAGE
-        # =================================================
-        #
-        # User message has no retrieved sources.
-        # =================================================
+        
 
         save_message(
             user_id=user_id,
@@ -571,14 +513,7 @@ def chat(
         )
 
 
-        # =================================================
-        # SAVE ASSISTANT MESSAGE
-        # =================================================
-        #
-        # Assistant answer stores retrieved sources.
-        # This allows sources to survive page refresh.
-        # =================================================
-
+        
         save_message(
             user_id=user_id,
             agent_id=agent_id,
@@ -596,20 +531,30 @@ def chat(
         )
 
 
-        # =================================================
-        # RESPONSE
-        # =================================================
+       
 
         return {
             "answer": answer,
             "sources": sources,
         }
+    except GeminiTemporarilyUnavailable as error:
 
+        print(
+            "CHAT ERROR: Gemini temporarily unavailable:",
+            str(error),
+            flush=True,
+        )
+
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The AI model is temporarily busy. "
+                "Please try again shortly."
+            ),
+        ) from error
 
     except HTTPException:
-
         raise
-
 
     except Exception as error:
 
@@ -621,16 +566,12 @@ def chat(
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Failed to process "
-                "chat request"
-            ),
-        )
+            detail="Failed to process chat request",
+        ) from error
 
 
-# =========================================================
-# GET CHAT HISTORY
-# =========================================================
+       
+
 
 @router.get(
     "/history/{agent_id}",
@@ -645,9 +586,7 @@ def chat_history(
     ),
 ):
 
-    # =====================================================
-    # USER
-    # =====================================================
+   
 
     user_id = token.get(
         "user_id"
@@ -660,9 +599,7 @@ def chat_history(
         )
 
 
-    # =====================================================
-    # NORMALIZE
-    # =====================================================
+    
 
     agent_id = agent_id.strip()
 
@@ -682,9 +619,7 @@ def chat_history(
         )
 
 
-    # =====================================================
-    # ACCESS
-    # =====================================================
+    
 
     verify_agent_access(
         agent_id=agent_id,
@@ -692,9 +627,7 @@ def chat_history(
     )
 
 
-    # =====================================================
-    # DO NOT ALLOW BOTH
-    # =====================================================
+    
 
     if (
         document_id
@@ -712,9 +645,7 @@ def chat_history(
 
     try:
 
-        # =================================================
-        # LOAD HISTORY
-        # =================================================
+       
 
         history = get_history(
             user_id=user_id,
@@ -734,10 +665,7 @@ def chat_history(
         )
 
 
-        # =================================================
-        # NORMALIZE RESPONSE
-        # =================================================
-
+        
         messages = []
 
 
@@ -815,9 +743,7 @@ def chat_history(
         )
 
 
-# =========================================================
-# DELETE CHAT HISTORY
-# =========================================================
+
 
 @router.delete(
     "/history/{agent_id}",
@@ -831,9 +757,7 @@ def delete_chat_history(
     ),
 ):
 
-    # =====================================================
-    # USER
-    # =====================================================
+   
 
     user_id = token.get(
         "user_id"
@@ -846,9 +770,7 @@ def delete_chat_history(
         )
 
 
-    # =====================================================
-    # NORMALIZE
-    # =====================================================
+    
 
     agent_id = agent_id.strip()
 
@@ -868,19 +790,14 @@ def delete_chat_history(
         )
 
 
-    # =====================================================
-    # ACCESS
-    # =====================================================
-
+    
     verify_agent_access(
         agent_id=agent_id,
         user_id=user_id,
     )
 
 
-    # =====================================================
-    # DO NOT ALLOW BOTH
-    # =====================================================
+    
 
     if (
         document_id
@@ -898,9 +815,7 @@ def delete_chat_history(
 
     try:
 
-        # =================================================
-        # CLEAR CORRECT HISTORY
-        # =================================================
+       
 
         deleted_count = clear_history(
             user_id=user_id,

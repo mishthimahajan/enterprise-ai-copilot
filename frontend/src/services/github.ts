@@ -1,8 +1,6 @@
 import API from "./api";
 
-/* =========================================================
-   TYPES
-========================================================= */
+
 
 export interface GitHubRepository {
   repository_id: string;
@@ -48,9 +46,7 @@ export interface ConnectRepositoryResponse {
   };
 }
 
-/* =========================================================
-   CONNECT REPOSITORY
-========================================================= */
+
 
 export async function connectRepository(
   data: ConnectRepositoryData
@@ -96,9 +92,6 @@ export async function connectRepository(
   }
 }
 
-/* =========================================================
-   GET REPOSITORIES
-========================================================= */
 
 export async function getRepositories(
   agentId: string
@@ -149,9 +142,7 @@ export async function getRepositories(
   }
 }
 
-/* =========================================================
-   SELECTED REPOSITORY
-========================================================= */
+
 
 export function setSelectedRepository(
   repositoryId: string
@@ -244,9 +235,7 @@ export async function reindexRepository(
   }
 }
 
-/* =========================================================
-   DELETE REPOSITORY
-========================================================= */
+
 
 export async function deleteRepository(
   repositoryId: string

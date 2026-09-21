@@ -1,264 +1,3 @@
-// "use client";
-
-// import {
-//   useEffect,
-//   useState,
-// } from "react";
-
-// import Link from "next/link";
-
-// import { useRouter, useSearchParams } from "next/navigation";
-
-// import {
-//   Lock,
-//   UserRound,
-// } from "lucide-react";
-
-// import AuthCard from "./AuthCard";
-// import AuthHeader from "./AuthHeader";
-
-// import useAuth from "@/hooks/useAuth";
-
-
-// export default function LoginForm() {
-
-//   const router = useRouter();
-// const searchParams = useSearchParams();
-
-// const redirect = searchParams.get("redirect") || "/dashboard";
-
-
-//   const {
-//     loginUser,
-//     loading,
-//   } = useAuth();
-
-
-//   const [
-//     agentId,
-//     setAgentId,
-//   ] = useState("");
-
-
-//   const [
-//     password,
-//     setPassword,
-//   ] = useState("");
-
-
-
-
-
-//   useEffect(() => {
-
-//     const token =
-//       localStorage.getItem(
-//         "access_token"
-//       );
-
-
-    
-//     if (token) {
-
-//       router.push(redirect);
-
-//     }
-
-//   }, [router]);
-
-
-
-
-
-//   const handleSubmit = async (
-//     e: React.FormEvent<HTMLFormElement>
-//   ) => {
-
-//     e.preventDefault();
-
-
-//     try {
-
-//       await loginUser({
-
-//         agent_id:
-//           agentId.trim(),
-
-//         password:
-//           password,
-
-//       });
-
-      
-
-//     } catch (err: any) {
-
-//       alert(
-//         err.message ||
-//           "Login failed"
-//       );
-
-//     }
-
-//   };
-
-
-//   return (
-
-//     <AuthCard>
-
-//       <AuthHeader
-//         title="Enterprise AI"
-//         subtitle="Sign in using your Agent ID"
-//       />
-
-
-//       <form
-//         onSubmit={
-//           handleSubmit
-//         }
-//         className="space-y-6"
-//       >
-
-
-//         {/* AGENT ID */}
-
-//         <div>
-
-//           <label className="text-sm font-medium">
-//             Agent ID
-//           </label>
-
-
-//           <div className="mt-2 flex items-center rounded-xl border px-4">
-
-//             <UserRound
-//               className="text-slate-400"
-//               size={18}
-//             />
-
-
-//             <input
-//               type="text"
-//               placeholder="EMP001"
-//               value={
-//                 agentId
-//               }
-//               onChange={(e) =>
-//                 setAgentId(
-//                   e.target.value
-//                 )
-//               }
-//               className="w-full bg-transparent px-3 py-4 outline-none"
-//               required
-//             />
-
-//           </div>
-
-//         </div>
-
-
-//         {/* PASSWORD */}
-
-//         <div>
-
-//           <label className="text-sm font-medium">
-//             Password
-//           </label>
-
-
-//           <div className="mt-2 flex items-center rounded-xl border px-4">
-
-//             <Lock
-//               className="text-slate-400"
-//               size={18}
-//             />
-
-
-//             <input
-//               type="password"
-//               placeholder="********"
-//               value={
-//                 password
-//               }
-//               onChange={(e) =>
-//                 setPassword(
-//                   e.target.value
-//                 )
-//               }
-//               className="w-full bg-transparent px-3 py-4 outline-none"
-//               required
-//             />
-
-//           </div>
-
-//         </div>
-
-
-//         {/* REMEMBER / FORGOT PASSWORD */}
-
-//         <div className="flex items-center justify-between">
-
-//           <label className="flex items-center gap-2 text-sm">
-
-//             <input
-//               type="checkbox"
-//             />
-
-//             Remember Me
-
-//           </label>
-
-
-//           <Link
-//             href="/forgot-password"
-//             className="text-sm text-blue-600 hover:underline"
-//           >
-//             Forgot Password?
-//           </Link>
-
-//         </div>
-
-
-//         {/* LOGIN BUTTON */}
-
-//         <button
-//           type="submit"
-//           disabled={
-//             loading
-//           }
-//           className="w-full rounded-xl bg-blue-600 py-4 font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
-//         >
-
-//           {loading
-//             ? "Signing In..."
-//             : "Sign In"}
-
-//         </button>
-
-
-//         {/* REGISTER */}
-
-//         <p className="text-center text-sm text-slate-500">
-
-//           Don't have an account?{" "}
-
-//           <Link
-//             href="/register"
-//             className="text-blue-600 hover:underline"
-//           >
-//             Register
-//           </Link>
-
-//         </p>
-
-//       </form>
-
-//     </AuthCard>
-
-//   );
-// }
-
 
 "use client";
 
@@ -364,14 +103,7 @@ export default function LoginForm() {
   }
 
   try {
-    /*
-     * Clear account-specific workspace state before
-     * authenticating another user.
-     *
-     * Do NOT remove access_token here yet.
-     * If login fails, the existing session is not
-     * unnecessarily destroyed.
-     */
+    
     if (
       typeof window !==
       "undefined"
@@ -390,18 +122,14 @@ export default function LoginForm() {
     }
 
     await loginUser({
-      // Backend expects agent_id,
-      // but UI correctly calls this Employee ID.
+      
       agent_id:
         cleanEmployeeId,
 
       password,
     });
 
-    /*
-     * loginUser should overwrite access_token
-     * with the newly authenticated user's JWT.
-     */
+    
 
     router.replace(
       redirect
@@ -420,9 +148,7 @@ export default function LoginForm() {
 }
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#F6F8FC]">
-      {/* =====================================================
-          BACKGROUND
-      ====================================================== */}
+      
 
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-[220px] top-[-200px] h-[600px] w-[600px] rounded-full bg-blue-300/[0.10] blur-[160px]" />
@@ -431,12 +157,10 @@ export default function LoginForm() {
       </div>
 
       <div className="relative grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
-        {/* =====================================================
-            LEFT PRODUCT PANEL
-        ====================================================== */}
+        
 
         <section className="relative hidden overflow-hidden bg-[#07111F] lg:flex lg:flex-col">
-          {/* GLOWS */}
+          
           <div className="pointer-events-none absolute inset-0">
             <div className="absolute -left-32 -top-32 h-[480px] w-[480px] rounded-full bg-blue-600/20 blur-[130px]" />
 
@@ -445,7 +169,7 @@ export default function LoginForm() {
             <div className="absolute right-[10%] top-[30%] h-[280px] w-[280px] rounded-full bg-cyan-500/[0.06] blur-[110px]" />
           </div>
 
-          {/* SUBTLE GRID */}
+          
           <div
             className="pointer-events-none absolute inset-0 opacity-[0.06]"
             style={{
@@ -458,7 +182,7 @@ export default function LoginForm() {
           />
 
           <div className="relative flex h-full flex-col px-10 py-8 xl:px-14 xl:py-10">
-            {/* BRAND */}
+            
             <Link
               href="/"
               className="flex w-fit items-center gap-3"
@@ -478,7 +202,7 @@ export default function LoginForm() {
               </div>
             </Link>
 
-            {/* HERO */}
+            
             <div className="my-auto max-w-[610px] py-10">
               <div className="inline-flex items-center gap-2 rounded-full border border-blue-400/15 bg-blue-400/[0.07] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.15em] text-blue-300">
                 <Sparkles className="h-3.5 w-3.5" />
@@ -607,13 +331,10 @@ export default function LoginForm() {
           </div>
         </section>
 
-        {/* =====================================================
-            RIGHT LOGIN PANEL
-        ====================================================== */}
-
+        
         <section className="relative flex min-h-screen items-center justify-center px-5 py-10 sm:px-8 lg:px-12">
           <div className="w-full max-w-[440px]">
-            {/* MOBILE BRAND */}
+            =
             <Link
               href="/"
               className="mb-10 flex w-fit items-center gap-3 lg:hidden"
@@ -633,7 +354,7 @@ export default function LoginForm() {
               </div>
             </Link>
 
-            {/* LOGIN HEADING */}
+            
             <div>
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 text-blue-600">
                 <UserRound className="h-5 w-5" />
@@ -649,7 +370,7 @@ export default function LoginForm() {
               </p>
             </div>
 
-            {/* SECURITY INFO */}
+            
             <div className="mt-6 flex items-center gap-3 rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600">
                 <ShieldCheck className="h-4 w-4" />
@@ -666,9 +387,7 @@ export default function LoginForm() {
               </div>
             </div>
 
-            {/* =================================================
-                FORM
-            ================================================== */}
+            
 
             <form
               onSubmit={
@@ -722,7 +441,7 @@ export default function LoginForm() {
                 </p>
               </div>
 
-              {/* PASSWORD */}
+              
               <div className="mt-5">
                 <div className="flex items-center justify-between">
                   <label

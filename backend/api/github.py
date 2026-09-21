@@ -34,9 +34,7 @@ from services.qdrant_service import (
     delete_repository_chunks,
 )
 
-# =========================================================
-# ROUTER
-# =========================================================
+
 
 router = APIRouter(
     prefix="/github",
@@ -44,9 +42,7 @@ router = APIRouter(
 )
 
 
-# =========================================================
-# REQUEST MODEL
-# =========================================================
+
 
 class GitHubRepositoryRequest(BaseModel):
     agent_id: str
@@ -55,9 +51,7 @@ class GitHubRepositoryRequest(BaseModel):
     github_token: str | None = None
 
 
-# =========================================================
-# AUTHENTICATION
-# =========================================================
+
 
 def get_authenticated_user_id(
     token: dict,
@@ -77,9 +71,6 @@ def get_authenticated_user_id(
     return user_id
 
 
-# =========================================================
-# VERIFY SHARED AGENT
-# =========================================================
 
 def verify_shared_agent(
     agent_id: str,
@@ -117,9 +108,7 @@ def verify_shared_agent(
     return agent
 
 
-# =========================================================
-# MONGODB INSERT WITH RETRY
-# =========================================================
+
 
 def insert_repository_with_retry(
     repository: dict,
@@ -176,9 +165,7 @@ def insert_repository_with_retry(
             )
 
 
-# =========================================================
-# MONGODB UPDATE WITH RETRY
-# =========================================================
+
 
 def update_repository_with_retry(
     repository_id: str,
@@ -243,9 +230,7 @@ def update_repository_with_retry(
             )
 
 
-# =========================================================
-# CONNECT + INDEX GITHUB REPOSITORY
-# =========================================================
+
 
 @router.post("/connect")
 def connect_repository(
@@ -256,9 +241,7 @@ def connect_repository(
     ),
 ):
 
-    # =====================================================
-    # AUTHENTICATION
-    # =====================================================
+    
 
     user_id = (
         get_authenticated_user_id(
@@ -267,18 +250,14 @@ def connect_repository(
     )
 
 
-    # =====================================================
-    # VERIFY AGENT
-    # =====================================================
+    
 
     verify_shared_agent(
         request.agent_id
     )
 
 
-    # =====================================================
-    # NORMALIZE INPUT
-    # =====================================================
+    
 
     repo_url = (
         request.repo_url
@@ -311,9 +290,7 @@ def connect_repository(
         )
 
 
-    # =====================================================
-    # CHECK WHETHER REPOSITORY ALREADY EXISTS
-    # =====================================================
+    
 
     try:
 
@@ -348,9 +325,7 @@ def connect_repository(
         )
 
 
-    # =====================================================
-    # EXISTING REPOSITORY
-    # =====================================================
+   
 
     if existing_repository:
 
@@ -378,9 +353,7 @@ def connect_repository(
         )
 
 
-        # -------------------------------------------------
-        # Mark as processing again
-        # -------------------------------------------------
+       
 
         update_repository_with_retry(
             repository_id,
@@ -402,9 +375,7 @@ def connect_repository(
         )
 
 
-        # -------------------------------------------------
-        # Remove old vectors before re-indexing
-        # -------------------------------------------------
+       
 
         try:
 
@@ -428,9 +399,7 @@ def connect_repository(
 
         except Exception as error:
 
-            # We allow indexing to continue.
-            # Deterministic point IDs also reduce
-            # duplicate-vector problems.
+            
             print(
                 (
                     "OLD REPOSITORY CHUNK "
@@ -441,9 +410,7 @@ def connect_repository(
             )
 
 
-    # =====================================================
-    # NEW REPOSITORY
-    # =====================================================
+   
 
     else:
 
@@ -525,9 +492,7 @@ def connect_repository(
             )
 
 
-    # =====================================================
-    # CLONE + PROCESS REPOSITORY
-    # =====================================================
+    
 
     try:
 
@@ -560,9 +525,7 @@ def connect_repository(
         )
 
 
-        # =================================================
-        # CLONE REPOSITORY
-        # =================================================
+        
 
         repo_data = (
             clone_repository(
@@ -598,16 +561,12 @@ def connect_repository(
             )
 
 
-        # =================================================
-        # ENSURE QDRANT COLLECTION
-        # =================================================
+       
 
         create_collection()
 
 
-        # =================================================
-        # CREATE CODE CHUNKS
-        # =================================================
+        
 
         all_chunks = []
 
@@ -706,8 +665,7 @@ def connect_repository(
                         "agent_id":
                             request.agent_id,
 
-                        # Kept for compatibility
-                        # with existing Qdrant design.
+                        
                         "document_id":
                             repository_id,
 
@@ -732,9 +690,7 @@ def connect_repository(
                 )
 
 
-        # =================================================
-        # VALIDATE CHUNKS
-        # =================================================
+        
 
         total_chunks = len(
             all_chunks
@@ -758,9 +714,7 @@ def connect_repository(
             )
 
 
-        # =================================================
-        # STORE IN QDRANT
-        # =================================================
+        
 
         print(
             "STARTING QDRANT BATCH STORE...",
@@ -798,9 +752,7 @@ def connect_repository(
             )
 
 
-        # =================================================
-        # MARK AS INDEXED
-        # =================================================
+        
 
         update_repository_with_retry(
             repository_id,
@@ -889,9 +841,7 @@ def connect_repository(
         }
 
 
-    # =====================================================
-    # FAILURE HANDLING
-    # =====================================================
+    
 
     except Exception as error:
 
@@ -943,9 +893,7 @@ def connect_repository(
         )
 
 
-# =========================================================
-# GET REPOSITORIES FOR SELECTED AGENT
-# =========================================================
+
 
 @router.get("/repositories")
 def get_repositories(
@@ -956,27 +904,21 @@ def get_repositories(
     ),
 ):
 
-    # =====================================================
-    # AUTH
-    # =====================================================
+    
 
     get_authenticated_user_id(
         token
     )
 
 
-    # =====================================================
-    # VERIFY AGENT
-    # =====================================================
+   
 
     verify_shared_agent(
         agent_id
     )
 
 
-    # =====================================================
-    # GET REPOSITORIES
-    # =====================================================
+    
 
     try:
 
@@ -1117,9 +1059,7 @@ def get_repositories(
             ),
     }
 
-# =========================================================
-# RE-INDEX EXISTING GITHUB REPOSITORY
-# =========================================================
+
 
 @router.post("/repositories/{repository_id}/reindex")
 def reindex_repository(

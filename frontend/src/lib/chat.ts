@@ -1,9 +1,7 @@
 import api from "./axios";
 
 
-// =====================================================
-// TYPES
-// =====================================================
+
 
 export interface ChatSource {
   filename?: string;
@@ -38,9 +36,7 @@ export interface ChatHistoryResponse {
 }
 
 
-// =====================================================
-// SEND CHAT MESSAGE
-// =====================================================
+
 
 export async function sendChatMessage(
   question: string,
@@ -147,9 +143,7 @@ export async function sendChatMessage(
 }
 
 
-// =====================================================
-// GET CHAT HISTORY
-// =====================================================
+
 
 export async function getChatHistory(
   agentId: string,
@@ -183,9 +177,7 @@ export async function getChatHistory(
 
   try {
 
-    // -------------------------------------------------
-    // BUILD QUERY PARAMETERS
-    // -------------------------------------------------
+    
 
     const params: {
       document_id?: string;
@@ -205,9 +197,7 @@ export async function getChatHistory(
     }
 
 
-    // -------------------------------------------------
-    // REQUEST
-    // -------------------------------------------------
+    
 
     const response =
       await api.get<ChatHistoryResponse>(
@@ -260,9 +250,7 @@ export async function getChatHistory(
 }
 
 
-// =====================================================
-// CLEAR CHAT HISTORY
-// =====================================================
+
 
 export async function clearChatHistory(
   agentId: string,
@@ -299,9 +287,7 @@ export async function clearChatHistory(
 
   try {
 
-    // -------------------------------------------------
-    // BUILD QUERY PARAMETERS
-    // -------------------------------------------------
+    
 
     const params: {
       document_id?: string;
@@ -321,9 +307,7 @@ export async function clearChatHistory(
     }
 
 
-    // -------------------------------------------------
-    // DELETE REQUEST
-    // -------------------------------------------------
+   
 
     await api.delete(
       `/chat/history/${encodeURIComponent(

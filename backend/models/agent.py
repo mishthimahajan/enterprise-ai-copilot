@@ -7,14 +7,7 @@ class AgentCreate(BaseModel):
     description: Optional[str] = ""
 
 
-# class AgentResponse(BaseModel):
-#     agent_id: str
-#     name: str
-#     description: Optional[str] = ""
-#     owner_id: str
-#     members: List[str] = Field(
-#         default_factory=list
-#     )
+
 class AgentResponse(BaseModel):
     agent_id: str
     name: str
@@ -29,14 +22,7 @@ class AgentResponse(BaseModel):
     is_active: bool = True
 
 
-# class AgentListItem(BaseModel):
-#     agent_id: str
-#     name: str
-#     description: Optional[str] = ""
-#     owner_id: str
-#     members: List[str] = Field(
-#         default_factory=list
-#     )
+
 
 class AgentListItem(BaseModel):
     agent_id: str

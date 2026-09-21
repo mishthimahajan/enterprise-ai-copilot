@@ -2,6 +2,9 @@ import os
 import time
 import uuid
 
+from pathlib import Path
+from urllib.parse import urlparse
+
 from typing import (
     Any,
     Dict,
@@ -27,16 +30,15 @@ from qdrant_client.models import (
 )
 
 
-# ============================================================
-# LOAD ENVIRONMENT
-# ============================================================
 
-load_dotenv()
+ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
+
+load_dotenv(
+    dotenv_path=ENV_PATH,
+    override=False,
+)
 
 
-# ============================================================
-# ENVIRONMENT VARIABLES
-# ============================================================
 
 QDRANT_URL = os.getenv(
     "QDRANT_URL"
@@ -47,16 +49,7 @@ QDRANT_API_KEY = os.getenv(
 )
 
 
-# IMPORTANT:
-#
-# Do NOT use your old 768-dimensional collection.
-#
-# FastEmbed MiniLM generates 384-dimensional vectors.
-#
-# Recommended .env:
-#
-# QDRANT_COLLECTION=enterprise_documents_v3_fastembed
-#
+
 QDRANT_COLLECTION = os.getenv(
     "QDRANT_COLLECTION",
     "enterprise_documents_v3_fastembed",
@@ -72,9 +65,7 @@ EMBEDDING_MODEL_NAME = os.getenv(
 VECTOR_SIZE = 384
 
 
-# ============================================================
-# VALIDATE CONFIGURATION
-# ============================================================
+
 
 if not QDRANT_URL:
 
@@ -83,9 +74,7 @@ if not QDRANT_URL:
     )
 
 
-# ============================================================
-# LAZY CLIENTS
-# ============================================================
+
 
 _qdrant_client: Optional[
     QdrantClient
@@ -97,49 +86,44 @@ _embedding_model: Optional[
 ] = None
 
 
-# ============================================================
-# QDRANT CLIENT
-# ============================================================
-
 def get_qdrant_client() -> QdrantClient:
-
     global _qdrant_client
 
-
     if _qdrant_client is None:
+
+        hostname = urlparse(
+            QDRANT_URL.strip()
+        ).hostname
+
+        print(
+            "Service Qdrant hostname:",
+            hostname,
+            flush=True,
+        )
 
         print(
             "Initializing Qdrant client...",
             flush=True,
         )
 
-
         _qdrant_client = QdrantClient(
-
-            url=QDRANT_URL,
-
+            url=QDRANT_URL.strip(),
             api_key=(
-                QDRANT_API_KEY
-                or None
+                QDRANT_API_KEY.strip()
+                if QDRANT_API_KEY
+                else None
             ),
-
-            # Increased for larger GitHub indexing jobs.
             timeout=180,
         )
-
 
         print(
             "Qdrant client initialized.",
             flush=True,
         )
 
-
     return _qdrant_client
 
 
-# ============================================================
-# FASTEMBED MODEL
-# ============================================================
 
 def get_embedding_model() -> TextEmbedding:
 
@@ -170,9 +154,7 @@ def get_embedding_model() -> TextEmbedding:
     return _embedding_model
 
 
-# ============================================================
-# QDRANT COLLECTION
-# ============================================================
+
 
 def ensure_collection() -> None:
 
@@ -191,9 +173,7 @@ def ensure_collection() -> None:
         )
 
 
-        # ====================================================
-        # CREATE COLLECTION
-        # ====================================================
+        
 
         if not exists:
 
@@ -228,9 +208,7 @@ def ensure_collection() -> None:
             )
 
 
-        # ====================================================
-        # VERIFY VECTOR DIMENSION
-        # ====================================================
+        
 
         collection_info = (
             client.get_collection(
@@ -272,9 +250,7 @@ def ensure_collection() -> None:
             pass
 
 
-        # ====================================================
-        # PAYLOAD INDEX: agent_id
-        # ====================================================
+        
 
         try:
 
@@ -304,9 +280,7 @@ def ensure_collection() -> None:
             pass
 
 
-        # ====================================================
-        # PAYLOAD INDEX: document_id
-        # ====================================================
+        
 
         try:
 
@@ -335,10 +309,7 @@ def ensure_collection() -> None:
             pass
 
 
-        # ====================================================
-        # PAYLOAD INDEX: repository_id
-        # ====================================================
-
+        
         try:
 
             client.create_payload_index(
@@ -366,9 +337,7 @@ def ensure_collection() -> None:
             pass
 
 
-        # ====================================================
-        # PAYLOAD INDEX: source_type
-        # ====================================================
+        
 
         try:
 
@@ -408,18 +377,14 @@ def ensure_collection() -> None:
         raise
 
 
-# ============================================================
-# COMPATIBILITY FUNCTION
-# ============================================================
+
 
 def create_collection() -> None:
 
     ensure_collection()
 
 
-# ============================================================
-# SINGLE EMBEDDING
-# ============================================================
+
 
 def create_embedding(
     text: str,
@@ -508,9 +473,7 @@ def create_embedding(
         raise
 
 
-# ============================================================
-# BATCH EMBEDDINGS
-# ============================================================
+
 
 def create_embeddings_batch(
     texts: List[str],
@@ -626,9 +589,7 @@ def create_embeddings_batch(
         raise
 
 
-# ============================================================
-# DETERMINISTIC POINT ID
-# ============================================================
+
 
 def generate_point_id(
     agent_id: str,
@@ -660,9 +621,7 @@ def generate_point_id(
     )
 
 
-# ============================================================
-# STORE SINGLE CHUNK
-# ============================================================
+
 
 def store_chunk(
 
@@ -883,9 +842,6 @@ def store_chunk(
     return point_id
 
 
-# ============================================================
-# STORE CHUNKS BATCH
-# ============================================================
 
 def store_chunks_batch(
 
@@ -925,9 +881,7 @@ def store_chunks_batch(
     )
 
 
-    # ========================================================
-    # VALIDATE CHUNKS
-    # ========================================================
+    
 
     valid_items: List[
         Dict[str, Any]
@@ -1028,9 +982,7 @@ def store_chunks_batch(
     )
 
 
-    # ========================================================
-    # PROCESS SMALL BATCHES
-    # ========================================================
+  
 
     for start in range(
         0,
@@ -1073,10 +1025,7 @@ def store_chunks_batch(
         )
 
 
-        # ====================================================
-        # FASTEMBED BATCH
-        # ====================================================
-
+       
         embeddings = (
             create_embeddings_batch(
                 texts
@@ -1089,9 +1038,7 @@ def store_chunks_batch(
         ] = []
 
 
-        # ====================================================
-        # CREATE QDRANT POINTS
-        # ====================================================
+       
 
         for (
             item,
@@ -1117,8 +1064,7 @@ def store_chunks_batch(
             )
 
 
-            # GitHub currently passes repository_id
-            # as document_id for compatibility.
+            
             source_id = (
 
                 repository_id
@@ -1189,9 +1135,7 @@ def store_chunks_batch(
             }
 
 
-            # =================================================
-            # GITHUB METADATA
-            # =================================================
+           
 
             if repository_id:
 
@@ -1228,9 +1172,7 @@ def store_chunks_batch(
                 ] = file_path
 
 
-            # =================================================
-            # OPTIONAL METADATA
-            # =================================================
+            
 
             metadata = (
                 item.get(
@@ -1268,9 +1210,7 @@ def store_chunks_batch(
             )
 
 
-        # ====================================================
-        # QDRANT UPSERT WITH RETRIES
-        # ====================================================
+        
 
         max_retries = 7
 
@@ -1387,8 +1327,7 @@ def store_chunks_batch(
         )
 
 
-        # Small pause to avoid hammering
-        # remote Qdrant continuously.
+        
         time.sleep(
             0.2
         )
@@ -1407,9 +1346,7 @@ def store_chunks_batch(
     return stored_items
 
 
-# ============================================================
-# STORE MULTIPLE DOCUMENT CHUNKS
-# ============================================================
+
 
 def store_chunks(
 
@@ -1486,9 +1423,7 @@ def store_chunks(
     )
 
 
-# ============================================================
-# SEARCH DOCUMENT / GENERIC CHUNKS
-# ============================================================
+
 
 def search_chunks(
 
@@ -1608,7 +1543,7 @@ def search_chunks(
 
     except AttributeError:
 
-        # Compatibility with older clients.
+        
         points = (
             client.search(
 
@@ -1738,9 +1673,7 @@ def search_chunks(
     return results
 
 
-# ============================================================
-# SEARCH GITHUB REPOSITORY
-# ============================================================
+
 
 def search_repository_chunks(
 
@@ -2013,9 +1946,7 @@ def search_repository_chunks(
     return results
 
 
-# ============================================================
-# DELETE DOCUMENT CHUNKS
-# ============================================================
+
 
 def delete_document_chunks(
 
@@ -2114,9 +2045,7 @@ def delete_document_chunks(
         raise
 
 
-# ============================================================
-# DELETE REPOSITORY CHUNKS
-# ============================================================
+
 
 def delete_repository_chunks(
     repository_id: str,
@@ -2193,9 +2122,7 @@ def delete_repository_chunks(
         raise
 
 
-# ============================================================
-# QDRANT CONNECTION TEST
-# ============================================================
+
 
 def check_qdrant_connection() -> bool:
 

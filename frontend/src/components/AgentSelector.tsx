@@ -26,9 +26,7 @@ export default function AgentSelector({
   onAgentChange,
 }: AgentSelectorProps) {
 
-  // ====================================================
-  // STATE
-  // ====================================================
+  
 
   const [
     agents,
@@ -58,9 +56,7 @@ export default function AgentSelector({
     useState("");
 
 
-  // ====================================================
-  // LOAD AGENTS
-  // ====================================================
+  
 
   useEffect(() => {
 
@@ -93,9 +89,7 @@ export default function AgentSelector({
       );
 
 
-      // --------------------------------------------
-      // No agents
-      // --------------------------------------------
+    
 
       if (
         data.length === 0
@@ -183,9 +177,7 @@ export default function AgentSelector({
   }
 
 
-  // ====================================================
-  // CHANGE AGENT
-  // ====================================================
+ 
 
   function handleAgentChange(
     event:
@@ -225,9 +217,6 @@ export default function AgentSelector({
   }
 
 
-  // ====================================================
-  // LOADING
-  // ====================================================
 
   if (loading) {
 
@@ -244,9 +233,7 @@ export default function AgentSelector({
   }
 
 
-  // ====================================================
-  // ERROR
-  // ====================================================
+
 
   if (error) {
 
@@ -263,9 +250,7 @@ export default function AgentSelector({
   }
 
 
-  // ====================================================
-  // NO AGENTS
-  // ====================================================
+ 
 
   if (
     agents.length === 0

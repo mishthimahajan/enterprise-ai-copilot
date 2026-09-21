@@ -5,9 +5,7 @@ from typing import Dict
 from git import Repo
 
 
-# =========================================================
-# SUPPORTED SOURCE FILE EXTENSIONS
-# =========================================================
+
 
 SUPPORTED_EXTENSIONS = {
     ".py",
@@ -36,9 +34,7 @@ SUPPORTED_EXTENSIONS = {
 }
 
 
-# =========================================================
-# DIRECTORIES TO IGNORE
-# =========================================================
+
 
 IGNORED_DIRECTORIES = {
     ".git",
@@ -56,9 +52,7 @@ IGNORED_DIRECTORIES = {
 }
 
 
-# =========================================================
-# FILES TO IGNORE
-# =========================================================
+
 
 IGNORED_FILENAMES = {
     ".env",
@@ -69,17 +63,13 @@ IGNORED_FILENAMES = {
 }
 
 
-# =========================================================
-# SHOULD FILE BE INDEXED
-# =========================================================
+
 
 def should_index_file(
     relative_path: Path,
 ) -> bool:
 
-    # -----------------------------------------------------
-    # Ignore generated / dependency directories
-    # -----------------------------------------------------
+    
 
     for part in relative_path.parts:
 
@@ -87,9 +77,7 @@ def should_index_file(
             return False
 
 
-    # -----------------------------------------------------
-    # Ignore environment files
-    # -----------------------------------------------------
+    
 
     if (
         relative_path.name
@@ -98,9 +86,7 @@ def should_index_file(
         return False
 
 
-    # -----------------------------------------------------
-    # Ignore likely secrets
-    # -----------------------------------------------------
+    
 
     lower_name = (
         relative_path.name.lower()
@@ -116,9 +102,7 @@ def should_index_file(
         return False
 
 
-    # -----------------------------------------------------
-    # Check extension
-    # -----------------------------------------------------
+    
 
     extension = (
         relative_path.suffix.lower()
@@ -135,9 +119,7 @@ def should_index_file(
     return True
 
 
-# =========================================================
-# DETECT PROGRAMMING LANGUAGE
-# =========================================================
+
 
 def detect_language(
     path: Path,
@@ -222,9 +204,7 @@ def detect_language(
     )
 
 
-# =========================================================
-# CLONE + READ GITHUB REPOSITORY
-# =========================================================
+
 
 def clone_repository(
     repo_url: str,
@@ -255,9 +235,7 @@ def clone_repository(
     )
 
 
-    # =====================================================
-    # TEMPORARY CLONE DIRECTORY
-    # =====================================================
+   
 
     with TemporaryDirectory() as temp_dir:
 
@@ -272,9 +250,7 @@ def clone_repository(
         )
 
 
-        # =================================================
-        # PRIVATE REPOSITORY SUPPORT
-        # =================================================
+        
 
         clone_url = (
             clean_repo_url
@@ -301,9 +277,7 @@ def clone_repository(
                 )
 
 
-        # =================================================
-        # CLONE REPOSITORY
-        # =================================================
+       
 
         try:
 
@@ -345,10 +319,7 @@ def clone_repository(
         )
 
 
-        # =================================================
-        # GET ALL FILES
-        # =================================================
-
+        
         all_files = [
             path
             for path
@@ -364,9 +335,7 @@ def clone_repository(
         )
 
 
-        # =================================================
-        # DEBUG FIRST RAW FILES
-        # =================================================
+       
 
         for path in all_files[:20]:
 
@@ -395,18 +364,14 @@ def clone_repository(
                 pass
 
 
-        # =================================================
-        # EXTRACT INDEXABLE FILES
-        # =================================================
+        
 
         files = []
 
 
         for path in all_files:
 
-            # ---------------------------------------------
-            # Relative repository path
-            # ---------------------------------------------
+            
 
             try:
 
@@ -422,9 +387,7 @@ def clone_repository(
                 continue
 
 
-            # ---------------------------------------------
-            # Filter unsupported files
-            # ---------------------------------------------
+            
 
             if not should_index_file(
                 relative_path
@@ -433,9 +396,7 @@ def clone_repository(
                 continue
 
 
-            # ---------------------------------------------
-            # Skip very large files
-            # ---------------------------------------------
+           
 
             try:
 
@@ -465,9 +426,7 @@ def clone_repository(
                 continue
 
 
-            # ---------------------------------------------
-            # Read file content
-            # ---------------------------------------------
+           
 
             try:
 
@@ -493,19 +452,13 @@ def clone_repository(
                 continue
 
 
-            # ---------------------------------------------
-            # Ignore empty files
-            # ---------------------------------------------
-
+            
             if not content.strip():
 
                 continue
 
 
-            # ---------------------------------------------
-            # Normalize path
-            # ---------------------------------------------
-
+          
             clean_path = (
                 str(
                     relative_path
@@ -517,9 +470,7 @@ def clone_repository(
             )
 
 
-            # ---------------------------------------------
-            # Add file metadata
-            # ---------------------------------------------
+           
 
             files.append(
                 {
@@ -541,9 +492,7 @@ def clone_repository(
             )
 
 
-        # =================================================
-        # RESULTS
-        # =================================================
+        
 
         print(
             "GITHUB FILES FOUND:",
@@ -582,3 +531,6 @@ def clone_repository(
             "file_count":
                 len(files),
         }
+
+
+

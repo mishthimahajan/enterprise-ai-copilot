@@ -1,9 +1,7 @@
 import API from "./api";
 
 
-// =========================================================
-// TYPES
-// =========================================================
+
 
 export interface RegisterData {
   name: string;
@@ -37,9 +35,6 @@ export interface AuthResponse {
 }
 
 
-// =========================================================
-// REGISTER
-// =========================================================
 
 export async function registerUser(
   data: RegisterData
@@ -126,9 +121,7 @@ export async function registerUser(
 }
 
 
-// =========================================================
-// LOGIN
-// =========================================================
+
 
 export async function loginUser(
   data: LoginData
@@ -147,7 +140,7 @@ export async function loginUser(
       response.data;
 
 
-    // Support both possible backend names.
+    
     const token =
       result.access_token ||
       result.token;
@@ -160,23 +153,7 @@ export async function loginUser(
     }
 
 
-    // =====================================================
-    // CLEAR PREVIOUS USER WORKSPACE
-    // =====================================================
-
-    /*
-     * Important:
-     *
-     * Suppose User A selected:
-     *
-     * Engineering Agent
-     *
-     * and then User B logs in using the
-     * same browser.
-     *
-     * User B should NOT automatically
-     * inherit User A's selected workspace.
-     */
+    
 
     if (
       typeof window !== "undefined"

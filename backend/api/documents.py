@@ -58,9 +58,7 @@ UPLOAD_DIR.mkdir(
 )
 
 
-# =========================================================
-# AUTHENTICATION HELPER
-# =========================================================
+
 
 def get_authenticated_user_id(
     token: dict,
@@ -82,9 +80,7 @@ def get_authenticated_user_id(
     return user_id
 
 
-# =========================================================
-# VERIFY SHARED AGENT ACCESS
-# =========================================================
+
 
 def verify_agent_access(
     agent_id: str,
@@ -136,9 +132,7 @@ def verify_agent_access(
     return agent
 
 
-# =========================================================
-# GET DOCUMENTS FOR SHARED AGENT
-# =========================================================
+
 
 @router.get("")
 def get_documents(
@@ -274,9 +268,7 @@ def get_documents(
     }
 
 
-# =========================================================
-# UPLOAD DOCUMENT TO SHARED AGENT
-# =========================================================
+
 
 @router.post("/upload")
 async def upload_document(
@@ -296,17 +288,13 @@ async def upload_document(
     )
 
 
-    # Shared agent:
-    # any authenticated user may upload
-    # to any active agent.
+    
     verify_agent_access(
         agent_id
     )
 
 
-    # =====================================================
-    # VALIDATE FILE
-    # =====================================================
+    
 
     if not file.filename:
 
@@ -359,9 +347,7 @@ async def upload_document(
         )
 
 
-    # =====================================================
-    # SAVE FILE LOCALLY
-    # =====================================================
+    
 
     unique_name = (
         f"{uuid.uuid4()}"
@@ -385,9 +371,7 @@ async def upload_document(
         )
 
 
-    # =====================================================
-    # DOCUMENT ID
-    # =====================================================
+    
 
     document_id = str(
         uuid.uuid4()
@@ -399,9 +383,7 @@ async def upload_document(
     )
 
 
-    # =====================================================
-    # SAVE MONGODB METADATA
-    # =====================================================
+    
 
     document = {
 
@@ -414,8 +396,7 @@ async def upload_document(
             agent_id,
 
 
-        # Audit only:
-        # does NOT control visibility.
+        
         "uploaded_by":
             user_id,
 
@@ -485,9 +466,7 @@ async def upload_document(
         )
 
 
-    # =====================================================
-    # DOCUMENT PROCESSING
-    # =====================================================
+    
 
     try:
 
@@ -537,9 +516,7 @@ async def upload_document(
             )
 
 
-        # =================================================
-        # CHUNK DOCUMENT
-        # =================================================
+        
 
         print(
             "Creating text chunks...",
@@ -593,16 +570,12 @@ async def upload_document(
         )
 
 
-        # =================================================
-        # QDRANT COLLECTION
-        # =================================================
+        
 
         create_collection()
 
 
-        # =================================================
-        # STORE DOCUMENT CHUNKS
-        # =================================================
+        
 
         for (
             index,
@@ -662,9 +635,7 @@ async def upload_document(
             )
 
 
-        # =================================================
-        # MARK DOCUMENT INDEXED
-        # =================================================
+        
 
         documents_collection.update_one(
             {
@@ -736,9 +707,7 @@ async def upload_document(
         )
 
 
-    # =====================================================
-    # RESPONSE
-    # =====================================================
+    
 
     return {
 
