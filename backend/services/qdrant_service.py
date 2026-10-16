@@ -76,24 +76,30 @@ if not QDRANT_URL:
 
 
 
-_qdrant_client: Optional[
-    QdrantClient
-] = None
+# ============================================================
+# GLOBAL / CACHED CLIENTS
+# ============================================================
 
+_qdrant_client: Optional[QdrantClient] = None
 
-_embedding_model: Optional[
-    TextEmbedding
-] = None
+_embedding_model: Optional[TextEmbedding] = None
+
+# IMPORTANT:
+# Tracks whether the Qdrant collection has already been checked/
+# created during the lifetime of this backend process.
+#
+# Without this initialization, ensure_collection() raises:
+# NameError: name '_collection_ready' is not defined
+_collection_ready: bool = False
 
 
 def get_qdrant_client() -> QdrantClient:
     global _qdrant_client
 
     if _qdrant_client is None:
+        clean_url = QDRANT_URL.strip().rstrip("/")
 
-        hostname = urlparse(
-            QDRANT_URL.strip()
-        ).hostname
+        hostname = urlparse(clean_url).hostname
 
         print(
             "Service Qdrant hostname:",
@@ -107,13 +113,15 @@ def get_qdrant_client() -> QdrantClient:
         )
 
         _qdrant_client = QdrantClient(
-            url=QDRANT_URL.strip(),
+            url=clean_url,
             api_key=(
                 QDRANT_API_KEY.strip()
                 if QDRANT_API_KEY
                 else None
             ),
             timeout=180,
+            prefer_grpc=False,
+            check_compatibility=False,
         )
 
         print(
@@ -122,8 +130,6 @@ def get_qdrant_client() -> QdrantClient:
         )
 
     return _qdrant_client
-
-
 
 def get_embedding_model() -> TextEmbedding:
 
@@ -157,226 +163,138 @@ def get_embedding_model() -> TextEmbedding:
 
 
 def ensure_collection() -> None:
+    global _collection_ready
 
-    client = (
-        get_qdrant_client()
-    )
+    if _collection_ready:
+        return
 
+    client = get_qdrant_client()
 
-    try:
+    max_retries = 5
 
-        exists = (
-            client.collection_exists(
-                collection_name=
-                    QDRANT_COLLECTION
-            )
-        )
-
-
-        
-
-        if not exists:
-
+    for attempt in range(1, max_retries + 1):
+        try:
             print(
-                "Creating Qdrant collection:",
-                QDRANT_COLLECTION,
+                f"Checking Qdrant collection "
+                f"(attempt {attempt}/{max_retries})...",
                 flush=True,
             )
 
+            exists = client.collection_exists(
+                collection_name=QDRANT_COLLECTION
+            )
 
-            client.create_collection(
-
-                collection_name=
+            if not exists:
+                print(
+                    "Creating Qdrant collection:",
                     QDRANT_COLLECTION,
+                    flush=True,
+                )
 
-                vectors_config=
-                    VectorParams(
-
-                        size=
-                            VECTOR_SIZE,
-
-                        distance=
-                            Distance.COSINE,
+                client.create_collection(
+                    collection_name=QDRANT_COLLECTION,
+                    vectors_config=VectorParams(
+                        size=VECTOR_SIZE,
+                        distance=Distance.COSINE,
                     ),
-            )
+                )
 
+                print(
+                    "Qdrant collection created:",
+                    QDRANT_COLLECTION,
+                    flush=True,
+                )
 
-            print(
-                "Qdrant collection created:",
-                QDRANT_COLLECTION,
-                flush=True,
-            )
-
-
-        
-
-        collection_info = (
-            client.get_collection(
+            collection_info = client.get_collection(
                 QDRANT_COLLECTION
             )
-        )
 
+            try:
+                current_size = (
+                    collection_info
+                    .config
+                    .params
+                    .vectors
+                    .size
+                )
 
-        try:
-
-            current_size = (
-                collection_info
-                .config
-                .params
-                .vectors
-                .size
-            )
-
-
-            if (
-                current_size
-                != VECTOR_SIZE
-            ):
-
-                raise RuntimeError(
-                    (
+                if current_size != VECTOR_SIZE:
+                    raise RuntimeError(
                         "Qdrant collection dimension mismatch. "
                         f"Collection '{QDRANT_COLLECTION}' "
                         f"uses {current_size} dimensions, "
-                        f"but FastEmbed requires "
-                        f"{VECTOR_SIZE}. "
+                        f"but FastEmbed requires {VECTOR_SIZE}. "
                         "Use a new QDRANT_COLLECTION name."
                     )
-                )
 
-        except AttributeError:
-            # Different qdrant-client versions may expose
-            # the collection metadata differently.
-            pass
+            except AttributeError:
+                pass
 
+            # Create payload indexes.
+            # Failure here is not fatal because the index
+            # may already exist.
 
-        
+            indexes = [
+                "agent_id",
+                "document_id",
+                "repository_id",
+                "source_type",
+            ]
 
-        try:
+            for field_name in indexes:
+                try:
+                    client.create_payload_index(
+                        collection_name=QDRANT_COLLECTION,
+                        field_name=field_name,
+                        field_schema=PayloadSchemaType.KEYWORD,
+                        wait=True,
+                    )
 
-            client.create_payload_index(
+                    print(
+                        f"Payload index ready: {field_name}",
+                        flush=True,
+                    )
 
-                collection_name=
-                    QDRANT_COLLECTION,
+                except Exception as index_error:
+                    print(
+                        f"Payload index skipped for {field_name}:",
+                        str(index_error),
+                        flush=True,
+                    )
 
-                field_name=
-                    "agent_id",
-
-                field_schema=
-                    PayloadSchemaType.KEYWORD,
-
-                wait=True,
-            )
-
+            _collection_ready = True
 
             print(
-                "Payload index ready: agent_id",
+                "Qdrant collection ready:",
+                QDRANT_COLLECTION,
                 flush=True,
             )
 
+            return
 
-        except Exception:
-            # Usually means it already exists.
-            pass
-
-
-        
-
-        try:
-
-            client.create_payload_index(
-
-                collection_name=
-                    QDRANT_COLLECTION,
-
-                field_name=
-                    "document_id",
-
-                field_schema=
-                    PayloadSchemaType.KEYWORD,
-
-                wait=True,
-            )
-
-
+        except Exception as error:
             print(
-                "Payload index ready: document_id",
+                f"QDRANT COLLECTION ERROR "
+                f"(attempt {attempt}/{max_retries}):",
+                repr(error),
                 flush=True,
             )
 
+            if attempt == max_retries:
+                raise
 
-        except Exception:
-            pass
-
-
-        
-        try:
-
-            client.create_payload_index(
-
-                collection_name=
-                    QDRANT_COLLECTION,
-
-                field_name=
-                    "repository_id",
-
-                field_schema=
-                    PayloadSchemaType.KEYWORD,
-
-                wait=True,
+            wait_seconds = min(
+                2 ** attempt,
+                15,
             )
 
-
             print(
-                "Payload index ready: repository_id",
+                f"Retrying Qdrant collection check "
+                f"in {wait_seconds} seconds...",
                 flush=True,
             )
 
-
-        except Exception:
-            pass
-
-
-        
-
-        try:
-
-            client.create_payload_index(
-
-                collection_name=
-                    QDRANT_COLLECTION,
-
-                field_name=
-                    "source_type",
-
-                field_schema=
-                    PayloadSchemaType.KEYWORD,
-
-                wait=True,
-            )
-
-
-            print(
-                "Payload index ready: source_type",
-                flush=True,
-            )
-
-
-        except Exception:
-            pass
-
-
-    except Exception as error:
-
-        print(
-            "QDRANT COLLECTION ERROR:",
-            repr(error),
-            flush=True,
-        )
-
-        raise
-
-
+            time.sleep(wait_seconds)
 
 
 def create_collection() -> None:
